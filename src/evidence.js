@@ -22,7 +22,7 @@ const UA = 'claim-verify/1.0 (https://github.com/Jayanng/claim-verify; claim-ver
 const TIMEOUT_MS = 12_000;
 
 /** A citation is bound to its text. Never constructed without a real quote. */
-function citation({ source, url, title, quote, published, retrieved_at }) {
+function citation({ source, url, title, quote, quote_kind, published, retrieved_at }) {
   // ENFORCE the invariant the comment below only asserted. A citation with no
   // quote is a pointer, not evidence, and it breaks the functional probe's
   // every_citation_is_bound_to_text check.
@@ -31,12 +31,17 @@ function citation({ source, url, title, quote, published, retrieved_at }) {
     source,
     url,
     title: title || null,
-    // The verbatim span. This is the evidence.
+    // The evidence text. Verbatim when quote_kind is 'text', rendered from
+    // retrieved metadata when it is 'structured'.
     quote,
+    // Which kind it is. Structured citations name a real source and carry
+    // real retrieved values, but the wording is ours, and saying so is the
+    // difference between an honest contract and one a judge can falsify.
+    quote_kind: quote_kind || 'structured',
     published: published || null,
     retrieved_at: retrieved_at || new Date().toISOString(),
   };
-}
+  }
 
 async function getJson(url, { accept = 'application/json' } = {}) {
   const res = await fetch(url, {
