@@ -157,7 +157,36 @@ async function verifyClaim(claim, opts = {}) {
     claim: text,
     reason: reasonFor(analysis, evidence),
     evidence,
-    analysis,
+    analysis: {
+      stage: 'typed-proposition-gate',
+      verdict: gateVerdict,
+      claim_facts: claimProps.map((p) => ({
+        anchor: p.predicate.canonical,
+        surface: p.predicate.surface,
+        kind: p.object.type,
+        value: p.object.raw,
+      })),
+      contradictions: gateContradictions,
+      supports: gateSupports,
+      gate_refusals: gateRefusals.slice(0, 12),
+      excluded_off_subject: gateRefusals.filter((r) => /identity|attach/i.test(r.reason || '')).length,
+      // The pre-rebuild engine still runs. Its answer is reported so a
+      // divergence between the two is visible rather than silent.
+      legacy_cross_check: {
+        verdict: analysis.verdict,
+        agrees: analysis.verdict === gateVerdict,
+        note: 'the typed-proposition gate is authoritative',
+      },
+      method:
+        'A claim and each quotation are parsed into typed propositions: an ' +
+        'entity, a canonical predicate, a typed value, and polarity and ' +
+        'modality. A proposition is contradicted only when the subject is ' +
+        'unambiguous at identity tier 2 or better, the predicate is the same ' +
+        'canonical predicate, the value types and units are compatible, the ' +
+        'evidence asserts a different value rather than denying one, the ' +
+        'value is attached to its own subject, and nothing anywhere in the ' +
+        'scope agrees. Any failure gives UNRESOLVED.',
+    },
     model_assessment,
     method: buildMethod(),
     generated_at_utc: requestedAtUtc,
