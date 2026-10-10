@@ -86,6 +86,16 @@ const SLASH_DATE_RE = /\b\d{1,4}\/\d{1,2}\/\d{1,4}\b/g;
  */
 function normaliseDates(text) {
   let out = text;
+  // CITATION METADATA IS NOT AN ASSERTION.
+  //
+  // A paper title carrying an anchor word binds its own publication date to
+  // that word: "Company founding and survival in emerging markets (2017)" put
+  // 2017 under the founding anchor and reported a true 1999 founding as
+  // contradicted. A parenthesised year is a citation date and cannot speak to
+  // the claim, so it is removed before any fact is extracted.
+  out = out.replace(/\((?:19|20)\d{2}(?:\s*[-–]\s*(?:19|20)\d{2})?\)/g, '');
+  // Likewise a trailing ", 2017." at the end of a rendered citation.
+  out = out.replace(/,\s*(?:19|20)\d{2}\.?\s*$/g, '');
   out = out.replace(ISO_DATE_RE, (m) => m.slice(0, 4));
   out = out.replace(SLASH_DATE_RE, (m) => {
     const parts = m.split('/');

@@ -78,8 +78,15 @@ async function verifyClaim(claim, opts = {}) {
     };
   }
 
+  // The retrieval-term override must not also be the subject-matching
+  // vocabulary. A caller passing terms: ['company'] would otherwise collapse
+  // subject matching to the single generic word path for ANY claim and widen
+  // the window in which a citation about a different entity contradicts it.
+  // Retrieval can be steered; the safety check cannot be weakened.
+  const claimDerivedTerms = extractTerms(text);
+
   const analysis = deterministicVerdict(text, evidence.citations, {
-    claimTerms: evidence.terms,
+    claimTerms: claimDerivedTerms, // NEVER the caller override: see below
   });
 
   // The model stage is optional and CANNOT touch `verdict`.
