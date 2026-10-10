@@ -192,9 +192,10 @@
         "type": "object",
         "required": [
           "source",
-          "quote"
+          "quote",
+          "quote_kind"
         ],
-        "description": "A citation is BOUND to its text. quote is the verbatim span, never a summary.",
+        "description": "A citation is BOUND to real retrieved data. quote_kind tells you which kind: \\\"text\\\" means the quote is a span the source actually wrote; \\\"structured\\\" means the service rendered a sentence from metadata fields such as a Wikidata property value. Structured citations name their source and are never invented, but their wording is ours. Missing values are rendered as [missing], never as zero or null.",
         "properties": {
           "source": {
             "type": "string"
@@ -213,7 +214,7 @@
           },
           "quote": {
             "type": "string",
-            "description": "Verbatim text. This is the evidence."
+            "description": "The evidence text. Verbatim when quote_kind is \\\"text\\\"; rendered from retrieved metadata when quote_kind is \\\"structured\\\"."
           },
           "published": {
             "type": [
@@ -224,6 +225,14 @@
           "retrieved_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "quote_kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "structured"
+            ],
+            "description": "Whether the quote is source wording or rendered from metadata."
           }
         }
       },

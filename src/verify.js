@@ -204,8 +204,16 @@ function buildMethod() {
       'It never infers truth from the absence of contradiction.',
       'It never upgrades UNRESOLVED using a model opinion.',
       'It never paraphrases a source into a quote it did not say.',
+      'It never presents a rendered value as though the source phrased it: ' +
+        'citations built from structured metadata carry quote_kind \"structured\" ' +
+        'and their fields, and only genuine source text carries quote_kind \"text\".',
       'It never returns a verdict when no evidence was retrieved.',
     ],
+    quote_kind:
+      'quote_kind is \"text\" when the quote is a span the source actually wrote, ' +
+      'and \"structured\" when the service rendered it from metadata fields such as ' +
+      'a Wikidata property value. Rendered citations are still bound to real retrieved ' +
+      'data and the source is named, but the wording is ours, so it is marked.',
     model_role:
       'If requested, a model assessment is returned in model_assessment and is marked ' +
       'derived: "model" with can_change_verdict: false. It can never alter the verdict.',

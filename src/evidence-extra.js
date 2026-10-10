@@ -104,6 +104,8 @@ const PROPERTY_TO_ANCHOR = {
 function wikidataValueLine(prop, v, label) {
   const anchor = PROPERTY_TO_ANCHOR[prop];
   const anchorWord = anchor ? ` ${anchor}` : '';
+  // Everything this helper returns is RENDERED from a structured value. The
+  // source never said it as a sentence, so callers mark it quote_kind structured.
   if (v && typeof v === 'object' && 'time' in v) {
     const date = String(v.time).replace(/^\+/, '').split('T')[0];
     return `${label}${anchorWord} in ${date} (Wikidata ${prop})`;
@@ -221,7 +223,8 @@ async function fromWorldBank(terms) {
         source: 'world-bank',
         url: `https://data.worldbank.org/country/${(r.id || '').toLowerCase()}`,
         title: squash(r.name),
-        quote: squash(`${r.name} (${r.id}). Region: ${r.region && r.region.value || 'n/a'}. Income level: ${r.incomeLevel && r.incomeLevel.value || 'n/a'}.`),
+        quote: squash(`${r.name} (${r.id}). Region: ${r.region && r.region.value || '[missing]'}. Income level: ${r.incomeLevel && r.incomeLevel.value || '[missing]'}.`),
+        quote_kind: 'structured',
         published: null,
       }));
       if (out.length >= 3) break;
@@ -258,6 +261,7 @@ async function fromEuropePmc(terms) {
         url: r.doi ? `https://doi.org/${r.doi}` : (r.id ? `https://europepmc.org/article/${r.source || 'MED'}/${r.id}` : null),
         title,
         quote: squash(`${title} — ${author}${journal ? `, ${journal}` : ''}${year ? `, ${year}` : ''}.`),
+        quote_kind: 'structured',
         published: year || null,
       }));
       if (out.length >= 3) break;
@@ -286,6 +290,7 @@ async function fromOpenAlex(terms) {
         url: w.id || null,
         title,
         quote: squash(`${title}${year ? ` (${year})` : ''}${w.host_venue && w.host_venue.display_name ? `, ${w.host_venue.display_name}` : ''}`),
+        quote_kind: 'structured',
         published: year,
       }));
       if (out.length >= 3) break;
@@ -314,7 +319,8 @@ async function fromOpenLibrary(terms) {
         source: 'openlibrary',
         url: doc.key ? `https://openlibrary.org${doc.key}` : null,
         title,
-        quote: squash(`${title} by ${author}, first published ${year}.`),
+        quote: squash(`${title} by ${author}, first published ${year || '[missing]'}.`),
+        quote_kind: 'structured',
         published: doc.first_publish_year ? String(doc.first_publish_year) : null,
       }));
       if (out.length >= 3) break;
@@ -345,7 +351,8 @@ async function fromMusicBrainz(terms) {
         source: 'musicbrainz',
         url: `https://musicbrainz.org/release-group/${rg.id}`,
         title,
-        quote: squash(`${title} by ${artist}, first released ${rg['first-release-date'] || 'unknown date'}.`),
+        quote: squash(`${title} by ${artist}, first released ${rg['first-release-date'] || '[missing]'}.`),
+        quote_kind: 'structured',
         published: rg['first-release-date'] || null,
       }));
       if (out.length >= 3) break;
@@ -374,7 +381,8 @@ async function fromUsgs(terms) {
         source: 'usgs',
         url: p.url || f.id || null,
         title,
-        quote: squash(`${title}. Magnitude ${p.mag}. Time ${p.time ? new Date(p.time).toISOString() : 'unknown'}. Place: ${p.place || 'unknown'}.`),
+        quote: squash(`${title}. Magnitude ${p.mag == null ? '[missing]' : p.mag}. Time ${p.time ? new Date(p.time).toISOString() : '[missing]'}. Place: ${p.place || '[missing]'}.`),
+        quote_kind: 'structured',
         published: p.time ? new Date(p.time).toISOString() : null,
       }));
       if (out.length >= 3) break;

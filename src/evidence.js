@@ -106,6 +106,7 @@ async function fromWikipedia(terms) {
         url: (d.content_urls && d.content_urls.desktop && d.content_urls.desktop.page) || null,
         title: d.title || title,
         quote: quotes[0],
+        quote_kind: 'text',
       }));
       if (out.length >= 3) break;
     }
@@ -135,7 +136,9 @@ async function fromCrossRef(terms) {
           source: 'crossref',
           url: it.URL || `https://doi.org/${it.DOI}`,
           title,
+          // A title is not an evidence sentence. Mark it when that is all we have.
           quote: quotes[0] || title,
+          quote_kind: quotes[0] ? 'text' : 'structured',
           published: (it.issued && it.issued['date-parts'] && it.issued['date-parts'][0])
             ? it.issued['date-parts'][0].join('-')
             : null,
@@ -169,6 +172,7 @@ async function fromSecEdgar(terms) {
           : 'https://www.sec.gov/edgar/search/',
         title: squash(display || src.root_forms || 'SEC filing'),
         quote: squash(h.highlight && (h.highlight.display_names || [])[0] || display || ''),
+        quote_kind: 'text',
         published: src.file_date || null,
       }));
       if (out.length >= 3) break;
@@ -209,6 +213,7 @@ async function fromArxiv(terms) {
           url: id,
           title,
           quote: quotes[0] || summary.slice(0, 400),
+          quote_kind: quotes[0] ? 'text' : 'structured',
           published,
         }));
       }
