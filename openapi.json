@@ -1,0 +1,645 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "claim-verify",
+    "version": "1.0.0",
+    "summary": "Claim Verification With Source Citations",
+    "description": "Takes a claim, retrieves evidence from eleven free sources, binds every citation to the exact text it cites, and reports whether the evidence contradicts the claim, agrees with it, or says nothing about it. A verdict is produced only by comparing explicit facts. Absence of contradiction is never treated as truth. A model assessment, when requested, is carried separately and cannot alter the verdict."
+  },
+  "servers": [
+    {
+      "url": "https://claim-verify.duckdns.org",
+      "description": "Pocket Beta TestNet supplier endpoint"
+    }
+  ],
+  "paths": {
+    "/v1/verify": {
+      "post": {
+        "operationId": "verifyClaim",
+        "summary": "Verify a claim against retrieved evidence",
+        "description": "Retrieves evidence, binds every citation to verbatim text, extracts explicit facts from the claim and from each quotation, and compares them by attribute. A contradiction requires the same attribute with a different value AND that the citation is about the same subject as the claim.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyRequest"
+              },
+              "examples": {
+                "false claim": {
+                  "summary": "A claim that is wrong, which must be contradicted",
+                  "value": {
+                    "claim": "Barack Obama was born in 1955."
+                  }
+                },
+                "true claim": {
+                  "summary": "A claim that is right, which must not be contradicted",
+                  "value": {
+                    "claim": "Albert Einstein was born in 1879."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification complete. Inspect verdict: CONTRADICTED or SUPPORTED carry quotations, UNRESOLVED means the evidence does not speak to the claim, INSUFFICIENT_EVIDENCE means nothing usable was retrieved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Payload rejected. Returns status REJECTED with a reason and details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Service could not complete the verification. Returns status UNAVAILABLE and verdict UNRESOLVED, never a guessed verdict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/identity": {
+      "get": {
+        "operationId": "getIdentity",
+        "summary": "Identity probe, pins the service id",
+        "description": "Returns the service identity, the contract properties, the evidence sources and the probe locations. Used by gateways and auditors to confirm which service answered.",
+        "responses": {
+          "200": {
+            "description": "Service identity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/probe": {
+      "get": {
+        "operationId": "getFunctionalProbe",
+        "summary": "Functional probe, not a liveness check",
+        "description": "Runs two REAL verifications: a claim known to be true, which must not be contradicted, and the same claim with a false value, which must be. This tests the reasoning rather than the response shape, so a supplier can prove the backend actually works before staking.",
+        "responses": {
+          "200": {
+            "description": "Probe passed. Every check in checks[] has pass true.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Probe"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Probe failed. At least one check has pass false.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Probe"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "getLiveness",
+        "summary": "Liveness only",
+        "description": "Cheap liveness check. This is NOT a substitute for the functional probe.",
+        "responses": {
+          "200": {
+            "description": "Process is alive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status"
+                  ],
+                  "description": "Liveness only. Deliberately NOT the Identity schema: this endpoint carries no service name and no schema id, so a scanner cannot fingerprint the service from it and a name-squatter cannot pass a check by echoing a string. Identity is served at /v1/identity.",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "ok"
+                    },
+                    "generated_at_utc": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "VerifyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim"
+        ],
+        "properties": {
+          "claim": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "The claim to verify, as plain text."
+          },
+          "include_model": {
+            "type": "boolean",
+            "default": false,
+            "description": "Request an optional model assessment. It is returned in model_assessment and can never alter the verdict."
+          },
+          "terms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "description": "Optional override for the retrieval terms. When omitted the terms are derived deterministically from the claim, so the same claim always queries the same terms."
+          }
+        }
+      },
+      "Citation": {
+        "type": "object",
+        "required": [
+          "source",
+          "quote"
+        ],
+        "description": "A citation is BOUND to its text. quote is the verbatim span, never a summary.",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quote": {
+            "type": "string",
+            "description": "Verbatim text. This is the evidence."
+          },
+          "published": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "retrieved_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Contradiction": {
+        "type": "object",
+        "required": [
+          "anchor",
+          "claim_value",
+          "evidence_value",
+          "claim_quote",
+          "evidence_quote"
+        ],
+        "description": "A provable disagreement. Both sides are quoted so it can be checked without trusting this service.",
+        "properties": {
+          "anchor": {
+            "type": "string",
+            "description": "The attribute both sides assert a value for, for example born or population."
+          },
+          "kind": {
+            "type": "string"
+          },
+          "claim_value": {
+            "type": "string"
+          },
+          "evidence_value": {
+            "type": "string"
+          },
+          "claim_quote": {
+            "type": "string"
+          },
+          "evidence_quote": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Analysis": {
+        "type": "object",
+        "required": [
+          "stage",
+          "verdict"
+        ],
+        "properties": {
+          "stage": {
+            "type": "string",
+            "const": "deterministic"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "CONTRADICTED",
+              "SUPPORTED",
+              "UNRESOLVED"
+            ]
+          },
+          "claim_facts": {
+            "type": "array",
+            "description": "The facts extracted from the claim, so a reader can see exactly what was compared.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "anchor": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contradictions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Contradiction"
+            }
+          },
+          "supports": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "citations_considered": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "excluded_off_subject": {
+            "type": "integer",
+            "description": "Citations dropped for being about a different subject. Reported so the decision to ignore them is visible."
+          },
+          "method": {
+            "type": "string"
+          }
+        }
+      },
+      "ModelAssessment": {
+        "type": "object",
+        "required": [
+          "derived",
+          "can_change_verdict"
+        ],
+        "description": "Optional and advisory. Structurally incapable of altering the verdict.",
+        "properties": {
+          "derived": {
+            "type": "string",
+            "const": "model"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "can_change_verdict": {
+            "type": "boolean",
+            "const": false
+          },
+          "assessment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "verdict_unaffected": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "VerifyResponse": {
+        "type": "object",
+        "required": [
+          "schema",
+          "status",
+          "verdict"
+        ],
+        "properties": {
+          "schema": {
+            "type": "string",
+            "const": "claim-verify/v1"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "CONTRADICTED",
+              "INSUFFICIENT_EVIDENCE",
+              "UNAVAILABLE",
+              "REJECTED"
+            ]
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "CONTRADICTED",
+              "SUPPORTED",
+              "UNRESOLVED"
+            ],
+            "description": "CONTRADICTED means the cited evidence states a different value for an attribute the claim asserts. SUPPORTED means the cited evidence states the same value, which is agreement with the source and NOT proof the claim is true. UNRESOLVED means the evidence does not speak to the claim, and is the default."
+          },
+          "claim": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "object",
+            "properties": {
+              "claim": {
+                "type": "string"
+              },
+              "terms": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "citations": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Citation"
+                }
+              },
+              "sources_queried": {
+                "type": "array",
+                "description": "One entry per source, INCLUDING any that failed. A failed source appears here with citations_returned 0 and an error, rather than vanishing.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "source": {
+                      "type": "string"
+                    },
+                    "citations_returned": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              },
+              "source_errors": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "evidence_count": {
+                "type": "integer"
+              },
+              "retrieval_ms": {
+                "type": "integer"
+              }
+            }
+          },
+          "analysis": {
+            "$ref": "#/components/schemas/Analysis"
+          },
+          "model_assessment": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ModelAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "method": {
+            "type": "object",
+            "description": "Stated in full in every response so nothing is taken on trust.",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "what_verdict_means": {
+                "type": "object"
+              },
+              "what_it_never_does": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "model_role": {
+                "type": "string"
+              },
+              "deterministic_aggregation": {
+                "type": "boolean"
+              }
+            }
+          },
+          "generated_at_utc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Rejection": {
+        "type": "object",
+        "required": [
+          "schema",
+          "status",
+          "reason"
+        ],
+        "properties": {
+          "schema": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "const": "REJECTED"
+          },
+          "verdict": {
+            "type": "string",
+            "const": "UNRESOLVED"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "details": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generated_at_utc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Identity": {
+        "type": "object",
+        "required": [
+          "schema",
+          "status",
+          "service"
+        ],
+        "properties": {
+          "schema": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "service": {
+            "type": "object"
+          },
+          "contract": {
+            "type": "object"
+          },
+          "evidence_sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verdicts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "probes": {
+            "type": "object"
+          },
+          "generated_at_utc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Probe": {
+        "type": "object",
+        "required": [
+          "schema",
+          "status",
+          "probe",
+          "checks"
+        ],
+        "properties": {
+          "schema": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OK",
+              "FAILED"
+            ]
+          },
+          "probe": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "latency_ms": {
+            "type": "integer"
+          },
+          "true_claim": {
+            "type": "object"
+          },
+          "false_claim": {
+            "type": "object"
+          },
+          "sources_seen": {
+            "type": "integer"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "pass"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "pass": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "generated_at_utc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    }
+  }
+}
