@@ -77,8 +77,7 @@ const PROPERTY_TO_ANCHOR = {
   P571: 'founded',     // inception
   P575: 'released',    // publication date
   P1104: 'count',      // number of pages
-  P1082: 'population', // population
-  P2046: 'height',     // area is not height, but size-like
+  P1082: 'population', // population but size-like
   P2067: 'weight',     // mass
   P2048: 'height',
   P2049: 'width',
@@ -89,21 +88,12 @@ const PROPERTY_TO_ANCHOR = {
   P1603: 'count',      // number of cases
   P11132: 'count',
   P1339: 'count',      // number of casualties
-  P1103: 'count',      // number of pages
-  P1352: 'count',      // ranking
-  P1354: 'count',
-  P1355: 'count',
-  P1356: 'count',
-  P1357: 'count',
+  P1103: 'count',      // number of pages      // ranking
   P1358: 'percentage', // inflation rate
   P1101: 'count',      // number of households
-  P2573: 'count',      // number of out-of-school children
-  P3831: 'count',      // object has role
-  P2044: 'height',     // elevation above sea level
-  P2217: 'count',      // number of spans
-  P2043: 'height',     // length
+  P2573: 'count',      // number of out-of-school children      // object has role     // elevation above sea level
+  P2217: 'count',      // number of spans     // length
   P1083: 'count',      // maximum capacity
-  P20462: 'count',
 };
 
 // Values we want to surface from a Wikidata claim, keyed by datatype.
