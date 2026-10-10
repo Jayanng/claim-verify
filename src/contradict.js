@@ -93,9 +93,9 @@ function normaliseDates(text) {
   // 2017 under the founding anchor and reported a true 1999 founding as
   // contradicted. A parenthesised year is a citation date and cannot speak to
   // the claim, so it is removed before any fact is extracted.
-  out = out.replace(/\((?:19|20)\d{2}(?:\s*[-–]\s*(?:19|20)\d{2})?\)/g, '');
+  out = out.replace(/\((?:1[0-9]|20)\d{2}(?:\s*[-–]\s*(?:1[0-9]|20)\d{2})?\)/g, '');
   // Likewise a trailing ", 2017." at the end of a rendered citation.
-  out = out.replace(/,\s*(?:19|20)\d{2}\.?\s*$/g, '');
+  out = out.replace(/,\s*(?:1[0-9]|20)\d{2}\.?\s*$/g, '');
   out = out.replace(ISO_DATE_RE, (m) => m.slice(0, 4));
   out = out.replace(SLASH_DATE_RE, (m) => {
     const parts = m.split('/');
@@ -387,30 +387,60 @@ function compareFacts(claimFacts, evidenceFacts, { subjectOk = true } = {}) {
       return true;
     });
 
+    // AN AGREEING QUOTE MUST NEVER CONTRADICT.
+    //
+    // If any rival states the same value as the claim, the source AGREES with
+    // the claim on this attribute. Whatever else the same quote contains is
+    // either a second recorded value or a different property, and neither is
+    // a contradiction.
+    //
+    // Verified failures before this rule:
+    //   "founded in 1994. incorporated in 1996"  vs "founded in 1994" -> CONTRADICTED
+    //   "height is 20000 (P2046); height is 300 (P2048)" vs "height 300" -> CONTRADICTED
+    //   "founded in 1899; founded in 1901"       vs "founded in 1901" -> CONTRADICTED
+    // Each quote AGREED with the claim and was still reported as disproving it.
+    //
+    // A source holding several values is AMBIGUOUS, not contradictory. That
+    // means UNRESOLVED, never CONTRADICTED.
+    const valueEqual = (a, b) =>
+      a.kind === 'year'
+        ? a.value === b.value
+        : Math.abs(a.value - b.value) <= Math.max(1e-9, Math.abs(a.value) * 0.005);
+
+    const anyRivalAgrees = rivals.some((ef) => valueEqual(cf, ef));
+
     for (const ef of rivals) {
-      const same =
-        cf.kind === 'year'
-          ? cf.value === ef.value
-          : Math.abs(cf.value - ef.value) <= Math.max(1e-9, Math.abs(cf.value) * 0.005);
+      const same = valueEqual(cf, ef);
 
       if (same) {
         supports.push({
           anchor: cf.anchor,
+          surface: cf.surface,
           claim_value: cf.raw,
           evidence_value: ef.raw,
           claim_quote: cf.quote,
           evidence_quote: ef.quote,
+          evidence_quote_kind: ef.quote_kind || 'structured',
+          source: ef.source || null,
+          url: ef.url || null,
+          title: ef.title || null,
         });
-      } else if (cf.unit === ef.unit || cf.kind === 'year') {
-        // Same attribute, same unit, different value. This is a PROVABLE
-        // contradiction, not a judgement.
+      } else if (!anyRivalAgrees && (cf.unit === ef.unit || cf.kind === 'year')) {
+        // Same attribute, same unit, different value, and NOTHING in this
+        // quote agrees with the claim. Only then is it a provable
+        // contradiction rather than a judgement.
         contradictions.push({
           anchor: cf.anchor,
+          surface: cf.surface,
           claim_value: cf.raw,
           evidence_value: ef.raw,
           claim_quote: cf.quote,
           evidence_quote: ef.quote,
+          evidence_quote_kind: ef.quote_kind || 'structured',
           kind: 'value_conflict',
+          source: ef.source || null,
+          url: ef.url || null,
+          title: ef.title || null,
         });
       }
     }
