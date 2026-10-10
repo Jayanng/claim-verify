@@ -1,0 +1,27 @@
+{
+  "name": "claim-verify",
+  "version": "1.0.0",
+  "description": "Claim verification with bound source citations. Pocket Network agentic service.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "src/",
+    "openapi.json",
+    "card.min.json",
+    "README.md"
+  ],
+  "keywords": [
+    "pocket-network",
+    "fact-checking",
+    "claim-verification",
+    "citations",
+    "agentic-service"
+  ],
+  "license": "MIT"
+}
