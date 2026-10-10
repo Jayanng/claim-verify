@@ -197,9 +197,26 @@ function identityTier(claimEntity, quoteEntity) {
     return { tier: 2, reason: `shared generational suffix '${sa}'` };
   }
 
-  if (sharedDistinctive.length >= 2) {
-    return { tier: 2, reason: `${sharedDistinctive.length} shared distinctive tokens` };
+  // TWO SHARED TOKENS IS STILL ONLY A NAME.
+  //
+  // The architecture says tier 2 needs a name PLUS a discriminator. A longer
+  // name is not a discriminator: "John Smith" and "John Smith Jones" share two
+  // tokens and are different candidates. What qualifies is an EXACT name match,
+  // or a real discriminator such as a generational suffix.
+  const exactNameMatch =
+    a.size === b.size && [...a].every((t) => b.has(t));
+  if (exactNameMatch && sharedDistinctive.length >= 2) {
+    return { tier: 2, reason: `exact name match on ${sharedDistinctive.length} tokens` };
   }
+
+  // A shared suffix plus any distinctive token is a real discriminator.
+  if (sa && sharedDistinctive.length >= 1) {
+    return { tier: 2, reason: `shared generational suffix '${sa}'` };
+  }
+
+  // Anything else is name-only. "John Smith" vs "John Smith Jones" lands
+  // here and may support but never contradict.
+  return { tier: 1, reason: `partial name overlap (${sharedDistinctive.join(', ')}), not an exact match and no discriminator` };
 
   return { tier: 1, reason: `single shared token '${sharedDistinctive[0] || shared[0]}'` };
 }

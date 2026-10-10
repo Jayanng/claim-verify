@@ -76,3 +76,18 @@ test('a generic type word is not a name', () => {
   const t = E.identityTier({ tokens: ['company'] }, { tokens: ['acme'] });
   assert.ok(t.tier < 2, 'a generic word must never licence a contradiction');
 });
+
+test('tier 2 is not reachable by name overlap alone', () => {
+  // Final review 1: two shared tokens was treated as tier 2, but a longer
+  // name is not a discriminator. 'John Smith' and 'John Smith Jones' share two
+  // tokens and are different candidates.
+  assert.equal(E.identityTier(
+    { tokens: ['john', 'smith'] }, { tokens: ['john', 'smith'] }).tier, 2,
+    'an exact name match is tier 2');
+  assert.equal(E.identityTier(
+    { tokens: ['john', 'smith'] }, { tokens: ['john', 'smith', 'jones'] }).tier, 1,
+    'partial name overlap is name only and must never contradict');
+  assert.equal(E.identityTier(
+    { tokens: ['albert', 'einstein'] }, { tokens: ['albert', 'einstein', 'jr'] }).tier, 1,
+    'a longer name on one side is not the same entity');
+});
