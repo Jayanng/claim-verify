@@ -387,15 +387,26 @@ const server = http.createServer(async (req, res) => {
         // The stated latency target is a budget, not a hope. Race the
         // verification against it so a slow upstream cannot hold a relay open
         // past the window, and answer with a refusal rather than a guess.
-        result = await Promise.race([
-          verifyClaim(parsed.value.claim, {
-          includeModel: parsed.value.includeModel,
-          terms: parsed.value.terms,
-          }),
-          new Promise((_, rej) =>
-            setTimeout(() => rej(new Error(`verification exceeded ${VERIFY_TIMEOUT_MS}ms budget`)), VERIFY_TIMEOUT_MS)
-          ),
-        ]);
+        // The timer is cleared in finally. Without that every request leaves a
+        // live 45s setTimeout behind, which holds the event loop open in any
+        // short lived process and is pure churn in a relay-served one.
+        let budgetTimer = null;
+        try {
+          result = await Promise.race([
+            verifyClaim(parsed.value.claim, {
+              includeModel: parsed.value.includeModel,
+              terms: parsed.value.terms,
+            }),
+            new Promise((_, rej) => {
+              budgetTimer = setTimeout(
+                () => rej(new Error(`verification exceeded ${VERIFY_TIMEOUT_MS}ms budget`)),
+                VERIFY_TIMEOUT_MS
+              );
+            }),
+          ]);
+        } finally {
+          if (budgetTimer) clearTimeout(budgetTimer);
+        }
         } catch (err) {
         // A thrown error is still a JSON object on the wire, and it is a
         // refusal rather than a fabricated verdict.

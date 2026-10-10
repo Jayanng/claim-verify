@@ -172,11 +172,24 @@ async function fromWikidata(terms) {
           return ka - kb;
         });
         for (const pid of pids) {
-          const first = (claims[pid] || [])[0];
-          const dv = first && first.mainsnak && first.mainsnak.datavalue;
-          if (!dv || !dv.value) continue;
-          const line = wikidataValueLine(pid, dv.value, label);
-          if (line) lines.push(line);
+          // READ EVERY STATEMENT, not just the first.
+          //
+          // A Wikidata entity legitimately records several values for one
+          // property: competing historical sources, preferred versus normal
+          // rank, deprecated statements. Taking only [0] meant a claim matching
+          // a SECOND value was contradicted by one the source itself ranks
+          // lower. Prefer the preferred rank, skip deprecated, and emit one
+          // line per remaining value so a claim matching any of them can agree.
+          const statements = (claims[pid] || [])
+            .filter((st) => st && st.rank !== 'deprecated')
+            .sort((a, b) => (b.rank === 'preferred') - (a.rank === 'preferred'));
+          for (const st of statements) {
+            const dv = st && st.mainsnak && st.mainsnak.datavalue;
+            if (!dv || !dv.value) continue;
+            const line = wikidataValueLine(pid, dv.value, label);
+            if (line) lines.push(line);
+            if (lines.length >= 5) break;
+          }
           if (lines.length >= 5) break;
         }
       } catch {

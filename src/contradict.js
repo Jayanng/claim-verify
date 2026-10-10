@@ -356,6 +356,7 @@ function sharesSubject(claimTerms, quote) {
   const strongEnough = content.length >= 2 ? matches.length >= 2 : matches.length >= 1;
   if (!strongEnough) return false;
 
+
   // GENERATIONAL DISAMBIGUATION, and it must be SYMMETRIC.
   //
   // An earlier version only rejected a quote that carried a suffix when the
@@ -438,6 +439,25 @@ function compareFacts(claimFacts, evidenceFacts, { subjectOk = true } = {}) {
 
     const anyRivalAgrees = rivals.some((ef) => valueEqual(cf, ef));
 
+    // A SINGLE GENERIC NOUN CANNOT CARRY A CONTRADICTION.
+    //
+    // With one distinctive content word the subject gate accepts a one-token
+    // match, so 'Google was founded in 1998' matched a citation about an
+    // unrelated film or song sharing that word and was contradicted by it.
+    // One word is enough to note agreement, never enough to prove a falsehood.
+    const GENERIC_NOUN = new Set([
+      'company', 'city', 'town', 'village', 'country', 'region', 'drug', 'film',
+      'movie', 'book', 'song', 'album', 'river', 'mountain', 'university',
+      'school', 'hospital', 'airport', 'station', 'game', 'team', 'club',
+      'brand', 'product', 'service', 'model', 'series', 'show',
+    ]);
+    // cf.quote is the claim's own span around this fact, which is exactly the
+    // subject context that matters.
+    const claimContentWords = extractTerms(cf.quote || '')
+      .filter((w) => w.length >= 4 && !/^[\d.]+$/.test(w));
+    const singleGeneric = claimContentWords.length === 1
+      && GENERIC_NOUN.has(String(claimContentWords[0]).toLowerCase());
+
     for (const ef of rivals) {
       const same = valueEqual(cf, ef);
 
@@ -454,7 +474,7 @@ function compareFacts(claimFacts, evidenceFacts, { subjectOk = true } = {}) {
           url: ef.url || null,
           title: ef.title || null,
         });
-      } else if (!anyRivalAgrees && (cf.unit === ef.unit || cf.kind === 'year')) {
+      } else if (!anyRivalAgrees && !singleGeneric && (cf.unit === ef.unit || cf.kind === 'year')) {
         // Same attribute, same unit, different value, and NOTHING in this
         // quote agrees with the claim. Only then is it a provable
         // contradiction rather than a judgement.

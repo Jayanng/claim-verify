@@ -15,7 +15,7 @@
  * evidence set and must return INSUFFICIENT_EVIDENCE. Nothing here fills a gap,
  * synthesises a quote, or paraphrases a source into something it did not say.
  *
- * All four sources are free and need no API key. Probed live.
+ * All eleven sources are free and need no API key. Probed live.
  */
 
 const UA = 'claim-verify/1.0 (https://github.com/Jayanng/claim-verify; claim-verify@example.invalid)';
@@ -141,9 +141,10 @@ async function fromCrossRef(terms) {
           source: 'crossref',
           url: it.URL || `https://doi.org/${it.DOI}`,
           title,
-          // A title is not an evidence sentence. Mark it when that is all we have.
+          // A title IS wording the source wrote, so it is 'text'. 'structured'
+          // is reserved for sentences THIS service composed from fields.
           quote: quotes[0] || title,
-          quote_kind: quotes[0] ? 'text' : 'structured',
+          quote_kind: 'text',
           published: (it.issued && it.issued['date-parts'] && it.issued['date-parts'][0])
             ? it.issued['date-parts'][0].join('-')
             : null,
@@ -218,7 +219,7 @@ async function fromArxiv(terms) {
           url: id,
           title,
           quote: quotes[0] || summary.slice(0, 400),
-          quote_kind: quotes[0] ? 'text' : 'structured',
+          quote_kind: 'text',
           published,
         }));
       }
