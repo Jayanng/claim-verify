@@ -166,7 +166,16 @@ function identityPayload() {
       display_name: 'Claim Verification With Source Citations',
       network: 'pocket-beta',
       chain_id: 'pocket-lego-testnet',
+      // THREE DISTINCT ROLES, confirmed against the chain with
+      // `pocketd query service show-service claim-verify`:
+      //   service_owner       owns the service registration and the card
+      //   supplier_operator   runs the RelayMiner, signs relays, submits claims
+      //   application         calls the service and pays for relays
+      // Only the first belongs in an identity probe. The others live in
+      // deploy/*.yaml and naming one of them here would misdirect an auditor.
       owner_address: 'pokt1hs0p9ceh2dkw4h5lk555cjgjjft8ya45uamt7g',
+      supplier_operator_address: 'pokt1ljj5y4huusjgfjafj6jtq6353uvu5v8u6fgpmr',
+      test_application_address: 'pokt153wm70dtv6seyxsyk2mmurk5pr8hjwpa0hk2tg',
     },
     contract: {
       transport: 'REST',
@@ -375,11 +384,19 @@ const server = http.createServer(async (req, res) => {
 
       let result;
       try {
-        result = await verifyClaim(parsed.value.claim, {
+        // The stated latency target is a budget, not a hope. Race the
+        // verification against it so a slow upstream cannot hold a relay open
+        // past the window, and answer with a refusal rather than a guess.
+        result = await Promise.race([
+          verifyClaim(parsed.value.claim, {
           includeModel: parsed.value.includeModel,
           terms: parsed.value.terms,
-        });
-      } catch (err) {
+          }),
+          new Promise((_, rej) =>
+            setTimeout(() => rej(new Error(`verification exceeded ${VERIFY_TIMEOUT_MS}ms budget`)), VERIFY_TIMEOUT_MS)
+          ),
+        ]);
+        } catch (err) {
         // A thrown error is still a JSON object on the wire, and it is a
         // refusal rather than a fabricated verdict.
         return sendJson(res, 500, {

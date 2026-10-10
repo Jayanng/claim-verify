@@ -105,7 +105,7 @@ function reasonFor(analysis, evidence) {
   switch (analysis.verdict) {
     case 'CONTRADICTED':
       return (
-        `${analysis.contradictions.length} cited source(s) state a different value ` +
+        `${new Set(analysis.contradictions.map((c) => c.source)).size} cited source(s) state a different value ` +
         `for an attribute the claim asserts. Both sides are quoted under ` +
         `analysis.contradictions.`
       );
