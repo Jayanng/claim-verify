@@ -305,13 +305,38 @@ function sharesSubject(claimTerms, quote) {
 
   if (!content.length) return false;
 
-  // MATCH AS WHOLE TOKENS, never as substrings.
+  // MATCH ONLY IN THE CLAUSE THAT CARRIES THE FACT.
   //
-  // "John" is a substring of "Johnson", so a claim about John was contradicted
-  // by a document about Johnson. Word boundaries close that.
-  const matches = content.filter((t) =>
-    new RegExp(`\\b${String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(q)
-  );
+  // The subject word used to match anywhere in the quote window. The window is
+  // centred on the anchor and runs 25 characters either side, so a citation
+  // naming two people put the WRONG person's name inside the window:
+  //
+  //   claim  "John Smith was born in 1980"
+  //   quote  "John Smith; Jane Doe born in 1970"
+  //   verdict CONTRADICTED, because "John Smith" is in the window even though
+  //   the birth year belongs to Jane Doe.
+  //
+  // That is a false contradiction, and it fires for any citation naming several
+  // entities: two people sharing a surname, a company and its subsidiary,
+  // several films or books, several clauses in one sentence.
+  //
+  // So the quote is split at the clause boundaries and a subject word only
+  // counts when it appears in the SAME clause as an anchor word. When no
+  // anchor survives the split, the whole quote is treated as one clause, so
+  // short single-clause quotes behave exactly as before.
+  const ANCHOR_WORD =
+    /\b(born|birth|died|death|passed away|population|inhabitants|residents|height|tall|altitude|weight|mass|weighs|price|cost|costs|costed|worth|value|valued|releas(?:ed|e)|premier(?:ed|e)|publish(?:ed|)|issued|found(?:ed|ing)?|establish(?:ed|ment)?|created|launched|incorporated|gdp|gross domestic product|temperatur(?:e|es)|warming|degrees|percent|percentage|per cent|total|number of|count|amount|sum)\b/i;
+
+  const clauses = q
+    .split(/\s*(?:[;.]|\s--\s|\s+and\s+|\s+but\s+|\s+whereas\s+|\s+while\s+)\s*/)
+    .filter(Boolean);
+  const factClauses = clauses.filter((c) => ANCHOR_WORD.test(c));
+  const scopes = factClauses.length ? factClauses : [q];
+
+  const matches = content.filter((t) => {
+    const re = new RegExp(`\\b${String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+    return scopes.some((s) => re.test(s));
+  });
 
   // STRONG ENOUGH TO BE ABOUT THE SAME THING.
   //

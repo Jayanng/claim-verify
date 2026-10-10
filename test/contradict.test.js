@@ -256,3 +256,26 @@ test('these regressions do not blunt real detection', () => {
       'every contradiction must quote the evidence verbatim');
   }
 });
+
+test('a fact binds to its own clause, not the whole quote window', () => {
+  // Found by an external review. The fact's subject check read the entire
+  // ±25 character window, so a citation naming two people put the WRONG
+  // person's name inside it and a true claim was contradicted by another
+  // entity's value.
+  repro('two people in one citation',
+    'John Smith was born in 1980',
+    'John Smith; Jane Doe born in 1970');
+  repro('two people in one clause',
+    'John Smith was born in 1980',
+    'John Smith and Jane Doe were born in 1970');
+  repro('parent and subsidiary',
+    'Acme Corp was founded in 1999.',
+    'Acme Corp; Acme Holdings was founded in 2005.');
+  // The subject word must still reach the fact when it IS about them.
+  const out = deterministicVerdict(
+    'John Smith was born in 1980',
+    [cit('test', 'John Smith was born in 1971')]
+  );
+  assert.equal(out.verdict, 'CONTRADICTED',
+    'a real falsehood about the right person must still be caught');
+});
