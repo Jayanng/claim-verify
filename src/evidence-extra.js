@@ -45,7 +45,9 @@ function citation({ source, url, title, quote, quote_kind, published, retrieved_
   };
 }
 
-async function getJson(url, extraHeaders = {}) {
+const SEC_UA = 'ClaimVerify Research admin@claim-verify.invalid';
+
+async function getJson(url, extraHeaders = {}, ua = UA) {
   const res = await fetch(url, {
     headers: { 'User-Agent': UA, Accept: 'application/json', ...extraHeaders },
     signal: AbortSignal.timeout(TIMEOUT_MS),

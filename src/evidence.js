@@ -43,9 +43,14 @@ function citation({ source, url, title, quote, quote_kind, published, retrieved_
   };
   }
 
-async function getJson(url, { accept = 'application/json' } = {}) {
+// SEC EDGAR rejects a UA carrying a URL and demands 'Company email' with
+// nothing between. Wikimedia rejects anything without a contact URL. No one
+// string satisfies both, so the caller may override the UA per source.
+const SEC_UA = 'ClaimVerify Research admin@claim-verify.invalid';
+
+async function getJson(url, { accept = 'application/json', ua = UA } = {}) {
   const res = await fetch(url, {
-    headers: { 'User-Agent': UA, Accept: accept },
+    headers: { 'User-Agent': ua, Accept: accept },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!res.ok) {
@@ -165,7 +170,7 @@ async function fromCrossRef(terms) {
 async function fromSecEdgar(terms) {
   const q = encodeURIComponent(terms.slice(0, 4).join(' '));
   try {
-    const d = await getJson(`https://efts.sec.gov/LATEST/search-index?q=${q}&forms=10-K,10-Q,8-K`);
+    const d = await getJson(`https://efts.sec.gov/LATEST/search-index?q=${q}&forms=10-K,10-Q,8-K`, { ua: SEC_UA });
     const hits = (d.hits && d.hits.hits) || [];
     const out = [];
     for (const h of hits.slice(0, 3)) {
