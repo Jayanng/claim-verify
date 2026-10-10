@@ -147,8 +147,13 @@ function extractPropositions(passage) {
     }
 
     for (const { owner, values } of groups.values()) {
-      const qualifierSet = readQualifiers(clause);
       for (const entry of values) {
+        // Qualifiers are read around THIS value, not across the whole clause.
+        // "Acme was founded in 1999, not 2001" affirms one value and denies
+        // another, and a clause-wide negation flag would discard the real
+        // assertion along with the denial.
+        const window = clause.slice(Math.max(0, entry.at - 40), Math.min(clause.length, entry.at + entry.len + 25));
+        const qualifierSet = readQualifiers(window);
         out.push({
           subject: subject
             ? { surface: subject.surface, tokens: subject.tokens, suffix: subject.suffix }
@@ -185,7 +190,7 @@ function extractPropositions(passage) {
  * affirmative assertion cannot contradict anything, so getting this wrong is
  * a false contradiction waiting to happen.
  */
-const NEGATION = /\b(not|never|no|n't|denies|denied|false|incorrect|wrong|myth|misconception)\b/i;
+const NEGATION = /\b(not|never|no|n't|cannot|can't|can not|denies|denied|false|incorrect|wrong|myth|misconception|without|lacks|lack|missing|fails|failed|refuses|refused|unable|impossible|rules out|ruled out|excludes|excluded|dismisses|dismissed|rejects|rejected|disputes|disputed|contradicts|contradicted|differs|differed|reject|deny)\b/i;
 const HEDGING = /\b(may|might|could|possibly|perhaps|alleged|allegedly|reported|rumoured|rumored|seems|appears|likely|unlikely|speculated|claimed)\b/i;
 const CONDITIONAL = /\b(if|would|should|were|had been|unless|suppose|assuming|in the event)\b/i;
 const ATTRIBUTION = /\b(according to|said|says|stated|claimed|reported|wrote|argued|believed|estimates|estimated)\b/i;
