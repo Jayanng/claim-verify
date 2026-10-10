@@ -49,16 +49,29 @@ function readBody(req, limitBytes = 64 * 1024) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
+    let over = false;
     req.on('data', (c) => {
+      if (over) return;
       size += c.length;
       if (size > limitBytes) {
+        over = true;
+        // DO NOT destroy the socket here.
+        //
+        // req.destroy() tears the connection down before the 413 body written by
+        // sendJson can flush, so the client gets an empty reply and no JSON at
+        // all. That breaks the rule that every response is a JSON object, and it
+        // was verified live: a 100KB POST returned "Empty reply from server".
+        //
+        // Drain instead. Stop buffering, keep the request flowing to completion,
+        // and let the caller answer with the JSON rejection once the promise
+        // settles.
+        chunks.length = 0;
         reject(new Error('request body exceeds 64 KiB'));
-        req.destroy();
         return;
       }
       chunks.push(c);
     });
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('end', () => resolve(over ? '' : Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
 }
