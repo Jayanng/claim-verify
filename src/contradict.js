@@ -36,33 +36,78 @@ const { squash, extractTerms } = require('./evidence');
  * producing nonsense contradictions.
  */
 const ANCHORS = [
-  { name: 'founded', re: /\b(found(?:ed|ing)?|establish(?:ed|ment)?|created|launched|incorporated)\b/gi },
-  { name: 'born', re: /\b(born|birth)\b/gi },
-  { name: 'died', re: /\b(died|death|passed away)\b/gi },
-  { name: 'population', re: /\b(population|inhabitants|residents)\b/gi },
-  { name: 'height', re: /\b(height|tall|altitude)\b/gi },
-  { name: 'weight', re: /\b(weight|mass|weighs)\b/gi },
-  { name: 'price', re: /\b(price|cost(?:s|ed)?|worth|value|valued)\b/gi },
-  { name: 'released', re: /\b(releas(?:ed|e)|premier(?:ed|e)|publish(?:ed|)|issued|released on)\b/gi },
-  { name: 'gdp', re: /\b(gdp|gross domestic product)\b/gi },
-  { name: 'temperature', re: /\b(temperatur(?:e|es)|warming|degrees)\b/gi },
-  { name: 'percentage', re: /\b(percent|percentage|per cent|%)\b/gi },
-  { name: 'count', re: /\b(total|number of|count|amount|sum)\b/gi },
+  // Comparison is by SURFACE WORD, not by anchor family. Earlier every member
+  // of a family produced the same anchor name, so "founded in 1999 and launched
+  // in 2004" put 2004 under the founded anchor and a true claim contradicted
+  // itself against evidence that correctly said 1999. Founded and launched are
+  // different attributes and must never compete. The `name` groups related
+  // words for reporting; `surface` is what is compared.
+  { name: 'founded', re: /\b(found(?:ed|ing)?|establish(?:ed|ment)?|created|launched|incorporated)\b/gi, surface: true },
+  { name: 'born', re: /\b(born|birth)\b/gi, surface: true },
+  { name: 'died', re: /\b(died|death|passed away)\b/gi, surface: true },
+  { name: 'population', re: /\b(population|inhabitants|residents)\b/gi, surface: true },
+  { name: 'height', re: /\b(height|tall|altitude)\b/gi, surface: true },
+  { name: 'weight', re: /\b(weight|mass|weighs)\b/gi, surface: true },
+  { name: 'price', re: /\b(price|cost(?:s|ed)?|worth|value|valued)\b/gi, surface: true },
+  { name: 'released', re: /\b(releas(?:ed|e)|premier(?:ed|e)|publish(?:ed|)|issued|released on)\b/gi, surface: true },
+  { name: 'gdp', re: /\b(gdp|gross domestic product)\b/gi, surface: true },
+  { name: 'temperature', re: /\b(temperatur(?:e|es)|warming|degrees)\b/gi, surface: true },
+  { name: 'percentage', re: /\b(percent|percentage|per cent|%)\b/gi, surface: true },
+  { name: 'count', re: /\b(total|number of|count|amount|sum)\b/gi, surface: true },
 ];
 
 // A numeric value, optionally with thousands separators, a sign, a unit or a
 // percentage. Deliberately strict so a stray digit is not read as a quantity.
-const NUMBER_RE = /-?\d[\d,]*(?:\.\d+)?\s*(?:%|percent|per cent|million|billion|trillion|thousand|[kKmM]\b)?/g;
+//
+// The trailing \s* was dropped from the match. It made "1999 " a five character
+// match that was not contained in the four character year span, so the number
+// and year dedup never fired and one token became BOTH a number fact and a
+// year fact. That duplicate is what the day-of-month false contradiction fed
+// on: "born 4 Aug. 1961" produced a number 4 competing with a year 1961.
+const NUMBER_RE = /\b\d[\d,]*(?:\.\d+)?(?:\s*(?:%|percent|per cent|million|billion|trillion|thousand|[kKmM]\b|[a-z]{2,12}\b))?/gi;
+
+// Measurement and currency units. Without these "828 meters" and "2717 feet"
+// both canonicalised to unit null, the unit equality gate passed, and two true
+// statements of the same height contradicted each other.
+const UNIT_RE = /(?:%|percent|per cent|million|billion|trillion|thousand|[kKmM]|meters?|metres?|feet|foot|ft|inches?|inch|cm|mm|km|kilometers?|kilometres?|miles?|kg|kilograms?|grams?|pounds?|lbs?|tonnes?|tons?|liters?|litres?|gallons?|usd|eur|gbp|jpy|dollars?|euros?|yen|cents?)\s*$/i;
 
 // Dates in the forms people actually write.
 const DATE_RE = /\b(\d{4})\b|\b(\d{1,2}\s+)?(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2},?\s+)?(\d{4})\b/gi;
+
+// ISO and slash dates are ONE date, not a year plus stray numbers.
+const ISO_DATE_RE = /\b\d{4}-\d{2}-\d{2}\b/g;
+const SLASH_DATE_RE = /\b\d{1,4}\/\d{1,2}\/\d{1,4}\b/g;
+
+/**
+ * Replace ISO, slash and day-month dates with their bare year BEFORE any number
+ * is collected. Otherwise the month and day segments leak out as signed numbers
+ * ("-08" becomes the number -8) and compare against a day-of-month elsewhere,
+ * which reports a true claim as contradicted.
+ */
+function normaliseDates(text) {
+  let out = text;
+  out = out.replace(ISO_DATE_RE, (m) => m.slice(0, 4));
+  out = out.replace(SLASH_DATE_RE, (m) => {
+    const parts = m.split('/');
+    const year = parts.find((p) => p.length === 4);
+    return year || m;
+  });
+  out = out.replace(/\b(\d{1,2})\s+(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?,?\s+(\d{4})\b/gi, '$3');
+  out = out.replace(/\b(January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.?\s+(\d{1,2}),?\s+(\d{4})\b/gi, '$3');
+  return out;
+}
 
 /** Canonicalise a numeric token so 1,227 and 1227 compare equal. */
 function canonNumber(raw) {
   if (!raw) return null;
   const s = String(raw).trim();
-  const unit = (s.match(/(million|billion|trillion|thousand|%|percent|per cent|[kKmM])\s*$/) || [])[1] || '';
-  const numStr = s.replace(/[,\s]/g, '').replace(/(million|billion|trillion|thousand|%|percent|per cent|[kKmM])\s*$/i, '');
+  const unit = (s.match(UNIT_RE) || [])[0] || '';
+  // Strip ANY trailing alphabetic run before reading the number. A trailing
+  // word is only ever a unit candidate: "1,227,000 people" must still yield
+  // 1227000 rather than null, or the fact disappears entirely.
+  const numStr = s.replace(/[,\s]/g, '').replace(/[a-z%]+$/i, '');
+  // At least one digit must survive, or "not a number" would canonicalise to 0.
+  if (!/\d/.test(numStr)) return null;
   const n = Number(numStr);
   if (!Number.isFinite(n)) return null;
   let scale = 1;
@@ -88,8 +133,22 @@ function canonNumber(raw) {
  * "founded" anchor and contradicted itself. That is precisely the false
  * contradiction this service exists to avoid.
  */
+/**
+ * Reduce an anchor's surface word to its stem so "founded", "founding" and
+ * "found" compare as ONE attribute, while "launched" stays distinct. Without
+ * this the surface split is too fine and a claim phrased with a different
+ * inflection would never be compared at all.
+ */
+function stemSurface(word) {
+  return String(word)
+    .toLowerCase()
+    .replace(/\.$/, '')
+    .replace(/(ing|ed|es|s)$/, '')
+    .replace(/e$/, (m, _o, s) => (s.length > 4 ? '' : 'e'));
+}
+
 function extractFacts(passage) {
-  const text = squash(passage);
+  const text = normaliseDates(squash(passage));
   const facts = [];
   if (!text) return facts;
 
@@ -132,7 +191,7 @@ function extractFacts(passage) {
     a.re.lastIndex = 0;
     let m;
     while ((m = a.re.exec(text)) !== null) {
-      anchors.push({ name: a.name, at: m.index, len: m[0].length });
+      anchors.push({ name: a.name, surface: stemSurface(m[0]), at: m.index, len: m[0].length });
     }
   }
   if (!anchors.length) return facts;
@@ -174,6 +233,9 @@ function extractFacts(passage) {
       const end = Math.min(text.length, cand.at + cand.len + 25);
       facts.push({
         anchor: an.name,
+        // The exact word that fired the anchor. Comparison is by this, not by
+        // the anchor family, so "founded" and "launched" never compete.
+        surface: an.surface || an.name,
         kind: cand.kind,
         value: cand.value,
         unit: cand.unit,
@@ -233,7 +295,13 @@ function sharesSubject(claimTerms, quote) {
 
   if (!content.length) return false;
 
-  const matches = content.filter((t) => q.includes(t));
+  // MATCH AS WHOLE TOKENS, never as substrings.
+  //
+  // "John" is a substring of "Johnson", so a claim about John was contradicted
+  // by a document about Johnson. Word boundaries close that.
+  const matches = content.filter((t) =>
+    new RegExp(`\\b${String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(q)
+  );
 
   // STRONG ENOUGH TO BE ABOUT THE SAME THING.
   //
@@ -249,18 +317,26 @@ function sharesSubject(claimTerms, quote) {
   const strongEnough = content.length >= 2 ? matches.length >= 2 : matches.length >= 1;
   if (!strongEnough) return false;
 
-  // GENERATIONAL DISAMBIGUATION.
+  // GENERATIONAL DISAMBIGUATION, and it must be SYMMETRIC.
   //
-  // A Wikidata citation lists several people. "Barack Obama Sr. born in
-  // 1934-06-18" sits next to "Barack Obama born in 1961-08-04" and shares every
-  // content word with a claim about the son, so it passed the subject check and
-  // reported a true claim as contradicted.
+  // An earlier version only rejected a quote that carried a suffix when the
+  // claim carried none. If the claim named ANY suffix the whole gate was
+  // switched off, so a true claim about one generation was contradicted by
+  // another: "Martin Luther King Jr. was born in 1929" against "King Sr. was
+  // born in 1899", and "Elizabeth II was born in 1926" against "Elizabeth I
+  // born in 1533". Both returned CONTRADICTED.
   //
-  // If the span names a generational suffix the claim does not use, it is a
-  // different entity and cannot speak to this claim.
-  const SUFFIX = /\b(sr|jr|ii|iii|iv|v|senior|junior)\b\.?/i;
-  const claimHasSuffix = SUFFIX.test(String(claimTerms.join(' ')));
-  if (!claimHasSuffix && SUFFIX.test(q)) return false;
+  // Now both sides are compared as entity keys. Different suffixes mean
+  // different entities. One side having a suffix the other lacks also means
+  // different entities. Only a match on both, or an absence on both, is the
+  // same entity.
+  const SUFFIX = /\b(sr|jr|ii|iii|iv|vi|vii|viii|ix|x|senior|junior)\b\.?/i;
+  const claimSuffix = (String(claimTerms.join(' ')).match(SUFFIX) || [])[0] || null;
+  const quoteSuffix = (q.match(SUFFIX) || [])[0] || null;
+  const normSuffix = (s) => (s ? s.toLowerCase().replace(/\./g, '') : null);
+  const cs = normSuffix(claimSuffix);
+  const qs = normSuffix(quoteSuffix);
+  if (cs !== qs) return false;
 
   return true;
 }
@@ -278,9 +354,28 @@ function compareFacts(claimFacts, evidenceFacts, { subjectOk = true } = {}) {
   if (!subjectOk) return { contradictions, supports };
 
   for (const cf of claimFacts) {
-    // Only compare within the same anchor, so different attributes never
-    // produce a false contradiction.
-    const rivals = evidenceFacts.filter((ef) => ef.anchor === cf.anchor && ef.kind === cf.kind);
+    // COMPARE BY ANCHOR FAMILY, but never let two different attributes of the
+    // SAME claim compete with one another.
+    //
+    // "founded in 1999 and launched in 2004" gives two facts under the founded
+    // anchor with different surface words. Comparing both against evidence that
+    // says "founded in 1999" reports the true claim as contradicted by its own
+    // launch year. So when the claim offers more than one surface word for this
+    // anchor, only the fact whose surface matches the evidence may be compared.
+    //
+    // When the claim offers a single surface word, cross-family comparison
+    // still happens, because "founded in 1999" and "Incorporated in 2001" are
+    // the same attribute and SHOULD contradict.
+    const surfaceSet = new Set(
+      claimFacts.filter((f) => f.anchor === cf.anchor && f.kind === cf.kind).map((f) => f.surface)
+    );
+    const claimIsMultiSurface = surfaceSet.size > 1;
+
+    const rivals = evidenceFacts.filter((ef) => {
+      if (ef.anchor !== cf.anchor || ef.kind !== cf.kind) return false;
+      if (claimIsMultiSurface && ef.surface !== cf.surface) return false;
+      return true;
+    });
 
     for (const ef of rivals) {
       const same =

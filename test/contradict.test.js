@@ -169,3 +169,90 @@ test('quotes are verbatim spans, not summaries', () => {
   assert.ok(c.claim_quote.includes('1999'),
     'the claim quote must contain the claim value');
 });
+
+// ---------------------------------------------------------------------------
+// REGRESSION SUITE: a true claim must never be reported as CONTRADICTED.
+//
+// Every case here was reproduced live by an audit against this code. The 15
+// tests above all passed while these seven vectors were broken, so green tests
+// were giving false confidence. Each asserts the safe direction AND keeps a
+// paired case proving the engine still catches a real falsehood.
+// ---------------------------------------------------------------------------
+
+// A plain assertion, NOT a test() call: node:test rejects registering a test
+// from inside another test body.
+const repro = (name, claim, quote) => {
+  const out = deterministicVerdict(claim, [cit('test', quote)]);
+  assert.notEqual(out.verdict, 'CONTRADICTED',
+    `TRUE claim must not be CONTRADICTED (${name}), got ${out.verdict}`);
+};
+
+test('date fragments never leak as competing numbers', () => {
+  // ISO dates and abbreviated months used to yield signed number facts, so
+  // "4 Aug. 1961" produced a number 4 that contradicted Wikidata's 1961.
+  repro('Obama 4 Aug 1961 vs ISO date',
+    'Barack Obama was born 4 Aug. 1961.',
+    'Barack Obama born in 1961-08-04 (Wikidata P569);');
+  const f = extractFacts('Barack Obama was born 4 Aug. 1961.');
+  assert.ok(f.every((x) => x.value !== 4 && x.value !== -8),
+    'no day-of-month or month-index fact may be produced');
+});
+
+test('different attributes of one claim never compete', () => {
+  // "founded in 1999 and launched in 2004" put 2004 under the founded anchor
+  // and contradicted evidence that correctly said 1999.
+  const out = deterministicVerdict(
+    'The company was founded in 1999 and launched in 2004.',
+    [cit('test', 'The company was founded in 1999.')]
+  );
+  assert.notEqual(out.verdict, 'CONTRADICTED');
+  assert.ok(out.supports.length >= 1, 'the agreement is still reported');
+});
+
+test('generational suffixes are compared symmetrically', () => {
+  // The gate used to switch off entirely once the claim named a suffix.
+  repro('MLK Jr vs Sr',
+    'Martin Luther King Jr. was born in 1929.',
+    'Martin Luther King Sr. was born in 1899.');
+  repro('Elizabeth II vs Elizabeth I',
+    'Elizabeth II was born in 1926.',
+    'Elizabeth I born in 1533.');
+  repro('suffix-less claim vs suffixed quote',
+    'Barack Obama was born in 1961.',
+    'Barack Obama Sr. born in 1934-06-18.');
+});
+
+test('subject matching uses whole tokens', () => {
+  repro('John vs Johnson',
+    'John was born in 1961.',
+    'Johnson was born in 1932 and wrote dictionaries.');
+});
+
+test('measurement units are captured and compared', () => {
+  repro('meters vs feet',
+    'Burj Khalifa height is 828 meters.',
+    'Burj Khalifa height is 2717 feet.');
+  repro('dollars vs euros',
+    'The price is 100 dollars.',
+    'The price is 85 euros.');
+});
+
+test('a property id is not a quantity', () => {
+  // "P569" used to yield a number fact of 569 under the nearest anchor.
+  const f = extractFacts('Albert Einstein born in 1879 (Wikidata P569)');
+  assert.ok(f.every((x) => x.value !== 569),
+    'the Wikidata property id must not become a value');
+});
+
+test('these regressions do not blunt real detection', () => {
+  for (const [claim, quote] of [
+    ['Barack Obama was born in 1955.', 'Barack Obama born in 1961-08-04 (Wikidata P569)'],
+    ['The company was founded in 1999.', 'Incorporated in 2001, the company filed its first report.'],
+  ]) {
+    const out = deterministicVerdict(claim, [cit('test', quote)]);
+    assert.equal(out.verdict, 'CONTRADICTED',
+      `a genuine falsehood must still be caught: ${claim}`);
+    assert.ok(out.contradictions[0].evidence_quote.length > 0,
+      'every contradiction must quote the evidence verbatim');
+  }
+});
