@@ -183,9 +183,10 @@ async function modelAssess(claim, evidence, analysis) {
 function buildMethod() {
   return {
     description:
-      'Retrieves evidence from Wikipedia, CrossRef, SEC EDGAR and arXiv, binds every ' +
-      'citation to the exact text it cites, extracts explicit facts from the claim and ' +
-      'from each quotation, and compares them by attribute.',
+      'Retrieves evidence from eleven free sources (Wikipedia, Wikidata, CrossRef, ' +
+      'OpenAlex, Europe PMC, SEC EDGAR, arXiv, World Bank, Open Library, MusicBrainz ' +
+      'and USGS), binds every citation to the exact text it cites, extracts explicit ' +
+      'facts from the claim and from each quotation, and compares them by attribute.',
     what_verdict_means: {
       CONTRADICTED:
         'The cited evidence states a different value for an attribute the claim asserts. ' +

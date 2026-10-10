@@ -1,0 +1,17 @@
+# Test application stake config for claim-verify on Pocket Beta TestNet.
+#
+# An application may be staked for EXACTLY ONE service. That is a protocol
+# constraint, not a client limitation, so claim-verify has its own application
+# account rather than sharing the one wx-ensemble uses.
+#
+# The key is NOT in this file. It lives in the local keyring under the name
+# cv-app, and pocket-ap reads it from POCKET_APP_PRIVATE_KEY.
+
+owner_address: pokt153wm70dtv6seyxsyk2mmurk5pr8hjwpa0hk2tg
+
+stake_amount: 2500000000upokt
+
+# service_ids is a FLAT LIST of strings, per Pocket's own example config at
+# localnet/pocketd/config/application1_stake_config.yaml.
+service_ids:
+  - claim-verify

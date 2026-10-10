@@ -1,0 +1,13 @@
+owner_address: pokt1ljj5y4huusjgfjafj6jtq6353uvu5v8u6fgpmr
+operator_address: pokt1ljj5y4huusjgfjafj6jtq6353uvu5v8u6fgpmr
+
+services:
+  - service_id: wx-ensemble
+    endpoints:
+      - publicly_exposed_url: https://wx-ensemble.duckdns.org
+        rpc_type: REST
+
+  - service_id: claim-verify
+    endpoints:
+      - publicly_exposed_url: https://claim-verify.duckdns.org
+        rpc_type: REST

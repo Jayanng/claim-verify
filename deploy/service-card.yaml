@@ -1,0 +1,13 @@
+# Publishes the service card for claim-verify on Pocket Beta TestNet.
+#
+# compute_units_per_relay MUST be stated and must match what is on chain, since
+# edit-service updates it along with the card. The chain reports 100000 for this
+# service.
+#
+# Card comparison is byte exact against what is stored, so this file is the
+# canonical card.min.json rather than a reformatted copy.
+
+services:
+  - service_id: claim-verify
+    compute_units_per_relay: 100000
+    card_file: /home/ubuntu/claim-verify/card.min.json

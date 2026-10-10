@@ -1,0 +1,31 @@
+# Supplier staking config for claim-verify on Pocket Beta TestNet.
+#
+# This supplier already serves wx-ensemble under a 60,000 POKT stake, so
+# claim-verify is ADDED to the same supplier's service list rather than staked
+# separately. The minimum supplier stake on this network is 59,500 POKT, which
+# the chain confirmed by rejecting a smaller amount with:
+#   "supplier with owner ... must stake at least 59500000000upokt"
+#
+# Custodial form: owner and operator are the same account. The operator key
+# signs relay responses and submits claims and proofs, and it also receives the
+# rewards.
+#
+# NOTE for updates: `pocketd tx supplier stake-supplier --services-only`
+# REJECTS a config that still carries stake_amount. That failure is easy to
+# miss in truncated output, so the services-only variant below omits it.
+
+owner_address: pokt1ljj5y4huusjgfjafj6jtq6353uvu5v8u6fgpmr
+operator_address: pokt1ljj5y4huusjgfjafj6jtq6353uvu5v8u6fgpmr
+
+stake_amount: 60000000000upokt
+
+services:
+  - service_id: wx-ensemble
+    endpoints:
+      - publicly_exposed_url: https://wx-ensemble.duckdns.org
+        rpc_type: REST
+
+  - service_id: claim-verify
+    endpoints:
+      - publicly_exposed_url: https://claim-verify.duckdns.org
+        rpc_type: REST

@@ -1,0 +1,19 @@
+# pocket-ap config for sending test relays against our own claim-verify supplier.
+#
+# The application private key is NOT in this file. pocket-ap reads it from the
+# POCKET_APP_PRIVATE_KEY environment variable, so this file is safe to commit.
+# On the box the key lives in the local keyring under the name cv-app.
+#
+# pocket-ap is the app side of a relay. The RelayMiner is the supplier side
+# (serves relays, signs responses, submits claims and proofs). Keeping them
+# separate is exactly the app / gateway / supplier split the network is built on.
+
+app:
+  private_key_hex: ""
+  # Assert at startup that this key is the app staked for claim-verify. pocket-ap
+  # refuses to run on a mismatch, so a wrong key cannot quietly send relays
+  # against somebody else's service.
+  service_id: "claim-verify"
+
+# Use the public Beta TestNet full nodes operated by Pocket Network Foundation.
+network: beta
