@@ -117,3 +117,47 @@ test('every refusal names its reason', () => {
   assert.equal(r.verdict, 'UNRESOLVED');
   assert.ok(r.reason && r.reason.length > 10, 'a refusal must say why');
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3 review 2 findings. Every one was a real path to CONTRADICTED.
+// ---------------------------------------------------------------------------
+
+test('polarity must be AFFIRMATIVE, not merely "not negated"', () => {
+  // Only 'negated' was rejected. Conditional, hypothetical, unknown and
+  // missing polarity all passed and could contradict.
+  const claim = mk('Acme Corp', 'founding', 1999, 'calendar_year', null, null, ['founded']);
+  const ev = [mk('Acme Corp', 'founding', 2001, 'calendar_year', 'Acme Corp was founded in 2001.', null, ['founded'])];
+  for (const pol of ['hypothetical', 'conditional', 'unknown', undefined]) {
+    safe(`polarity ${pol}`,
+      Object.assign({}, claim, { qualifiers: { polarity: pol, modality: 'asserted' } }),
+      ev, 'Acme Corp was founded in 2001.');
+  }
+});
+
+test('a value must be a real finite number', () => {
+  // NaN compares unequal to everything, so an unparseable value looked like a
+  // contradiction against any evidence.
+  safe('NaN value',
+    mk('Acme Corp', 'founding', NaN, 'calendar_year', null, null, ['founded']),
+    [mk('Acme Corp', 'founding', 2001, 'calendar_year', 'Acme Corp was founded in 2001.', null, ['founded'])],
+    'Acme Corp was founded in 2001.');
+});
+
+test('the value must appear as a whole token in the quote', () => {
+  // Substring presence let the value 20 match inside 2001.
+  safe('value substring',
+    mk('Acme Corp', 'founding', 1999, 'calendar_year', null, null, ['founded']),
+    [mk('Acme Corp', 'founding', 20, 'calendar_year', 'Acme Corp was founded in 2001.', null, ['founded'])],
+    'Acme Corp was founded in 2001.');
+});
+
+test('malformed evidence returns UNRESOLVED rather than throwing', () => {
+  // A crash in the gate produces no verdict at all, which is worse than a
+  // refusal.
+  const claim = mk('Acme Corp', 'founding', 1999, 'calendar_year', null, null, ['founded']);
+  for (const bad of [[null, undefined, {}], 'not an array', null, 42]) {
+    const r = C.evaluate(claim, bad, { quote: 'Acme Corp was founded in 2001.' });
+    assert.equal(r.verdict, 'UNRESOLVED');
+    assert.ok(r.reason, 'a refusal must name its reason');
+  }
+});

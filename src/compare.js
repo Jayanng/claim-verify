@@ -68,6 +68,10 @@ function pass() {
 
 function valuesCompatible(a, b) {
   if (!a || !b) return false;
+  // A value must be a real finite number. NaN compares unequal to everything,
+  // so an unparseable value would look like a contradiction.
+  if (typeof a.value !== 'number' || !Number.isFinite(a.value)) return false;
+  if (typeof b.value !== 'number' || !Number.isFinite(b.value)) return false;
   // Different semantic types are not comparable at all. A height is not a
   // year, and treating them as one is how "2020 meters" became a date.
   if (a.type !== b.type) return false;
@@ -100,6 +104,15 @@ function valuesEqual(a, b) {
  * the contradiction rules.
  */
 function evaluate(claimProp, evidenceProps, citation) {
+  try {
+    return evaluateInner(claimProp, evidenceProps, citation);
+  } catch (err) {
+    return refuse(`the comparison could not be completed safely: ${String(err && err.message || err)}`);
+  }
+}
+
+function evaluateInner(claimProp, evidenceProps, citation) {
+  if (!Array.isArray(evidenceProps)) evidenceProps = [];
   // 1. A complete claim proposition.
   if (!claimProp || !claimProp.subject || !claimProp.predicate || !claimProp.object) {
     return refuse('the claim does not resolve to a complete proposition');
@@ -118,8 +131,8 @@ function evaluate(claimProp, evidenceProps, citation) {
   // 5. Affirmative and asserted. A negated or hypothetical claim is not a
   //    claim we can contradict.
   const q = claimProp.qualifiers || {};
-  if (q.polarity === 'negated') {
-    return refuse('the claim is negated, so there is no asserted value to contradict');
+  if (q.polarity !== 'affirmative') {
+    return refuse(`the claim is ${q.polarity || 'of unknown polarity'}, not an affirmative assertion`);
   }
   if (q.modality && q.modality !== 'asserted') {
     return refuse(`the claim is ${q.modality}, not asserted`);
@@ -164,8 +177,8 @@ function evaluate(claimProp, evidenceProps, citation) {
 
     // 12. The evidence must ASSERT the incompatible value.
     const eq = ep.qualifiers || {};
-    if (eq.polarity === 'negated') {
-      return refuse('the evidence negates a value rather than asserting a different one');
+    if (eq.polarity !== 'affirmative') {
+      return refuse(`the evidence is ${eq.polarity || 'of unknown polarity'}, not an affirmative assertion`);
     }
     if (eq.modality && eq.modality !== 'asserted') {
       return refuse(`the evidence is ${eq.modality}, not asserted`);
@@ -175,7 +188,10 @@ function evaluate(claimProp, evidenceProps, citation) {
     const clause = ep.provenance && ep.provenance.sentence
       ? ep.provenance.sentence
       : (citation && citation.quote) || '';
-    const at = attach(clause, claimProp.subject, 0, 0);
+    // Checked against the EVIDENCE proposition's own subject and value.
+    // Checking the claim subject here only ever asks whether the claim is
+    // about itself, which is trivially true and proves nothing.
+    const at = attach(clause, ep.subject, 0, 0);
     if (!at.attached) {
       return refuse(`attachment unresolved: ${at.reason}`);
     }
@@ -206,7 +222,8 @@ function evaluate(claimProp, evidenceProps, citation) {
     const hasSubject = String(ep.subject && ep.subject.surface || '')
       .toLowerCase().split(/\s+/).filter(Boolean)
       .some((t) => quoteLower.includes(t));
-    const hasValue = quote.includes(String(ep.object.raw || ep.object.value));
+    const valueToken = String(ep.object.raw || ep.object.value);
+    const hasValue = new RegExp('\\b' + valueToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(quote);
     if (!hasPredicate || !hasSubject || !hasValue) {
       return refuse(
         `the quoted span does not establish the proposition (predicate in quote: ${hasPredicate}, subject: ${hasSubject}, value: ${hasValue})`
