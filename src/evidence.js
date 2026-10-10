@@ -254,6 +254,7 @@ async function gatherEvidence(claim, { terms } = {}) {
     fromWikipedia, fromCrossRef, fromSecEdgar, fromArxiv,
     extra.fromWikidata, extra.fromWorldBank, extra.fromEuropePmc,
     extra.fromOpenAlex, extra.fromOpenLibrary, extra.fromMusicBrainz, extra.fromUsgs,
+    extra.fromGutenberg, extra.fromInternetArchive, extra.fromWikinews,
   ];
 
   // BOUNDED CONCURRENCY. Firing all fourteen at once gets the shared encyclopaedia
