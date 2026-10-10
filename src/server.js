@@ -33,15 +33,22 @@ const OPENAPI_PATH = path.join(__dirname, '..', 'openapi.json');
 // Upstream budget. Eleven sources, bounded three at a time.
 const VERIFY_TIMEOUT_MS = 45_000;
 
-function sendJson(res, status, obj) {
+function sendJson(res, status, obj, { bare = false } = {}) {
   const body = Buffer.from(JSON.stringify(obj, null, 2));
-  res.writeHead(status, {
+  const headers = {
     'content-type': 'application/json; charset=utf-8',
     'content-length': body.length,
     'cache-control': 'no-store',
-    'x-service-id': SERVICE_ID,
-    'x-service-schema': SCHEMA,
-  });
+  };
+  // bare omits the identity headers. /healthz is documented as carrying no
+  // service name so scanners cannot fingerprint the service and name-squatters
+  // cannot pass by echoing a string. Those headers gave exactly that
+  // fingerprint on every call, defeating the design.
+  if (!bare) {
+    headers['x-service-id'] = SERVICE_ID;
+    headers['x-service-schema'] = SCHEMA;
+  }
+  res.writeHead(status, headers);
   res.end(body);
 }
 
@@ -119,13 +126,27 @@ function parseRequest(raw) {
     return { ok: false, error: 'claim must be at most 2000 characters.' };
   }
 
+  // REJECT, never coerce. The published schema says include_model is a boolean
+  // and terms has maxItems 12, and the honesty contract says values are never
+  // altered. Accepting include_model: "yes" as false, or silently dropping the
+  // thirteenth term, changes a caller's request without telling them.
+  if (parsed.include_model !== undefined && typeof parsed.include_model !== 'boolean') {
+    return { ok: false, error: 'include_model must be a boolean, not ' + JSON.stringify(parsed.include_model) + '.' };
+  }
   const includeModel = parsed.include_model === true;
   let terms = null;
   if (parsed.terms !== undefined) {
     if (!Array.isArray(parsed.terms) || parsed.terms.some((t) => typeof t !== 'string')) {
       return { ok: false, error: 'terms must be an array of strings.' };
     }
-    terms = parsed.terms.slice(0, 12);
+    if (parsed.terms.length > 12) {
+      return { ok: false, error: 'terms accepts at most 12 entries; received ' + parsed.terms.length + '.' };
+    }
+    const tooLong = parsed.terms.find((t) => t.length > 120);
+    if (tooLong) {
+      return { ok: false, error: 'each term must be at most 120 characters.' };
+    }
+    terms = parsed.terms;
   }
 
   return { ok: true, value: { claim: claim.trim(), includeModel, terms } };
@@ -251,19 +272,19 @@ const server = http.createServer(async (req, res) => {
   const url = (req.url || '/').split('?')[0];
 
   try {
-    if (req.method === 'GET' && (url === '/healthz' || url === '/health')) {
+    if (['GET', 'HEAD'].includes(req.method) && (url === '/healthz' || url === '/health')) {
       // Liveness ONLY. No service name, no schema. Identity is at /v1/identity.
       return sendJson(res, 200, {
         status: 'ok',
         generated_at_utc: new Date().toISOString(),
-      });
+      }, { bare: true });
     }
 
-    if (req.method === 'GET' && url === '/v1/identity') {
+    if (['GET', 'HEAD'].includes(req.method) && url === '/v1/identity') {
       return sendJson(res, 200, identityPayload());
     }
 
-    if (req.method === 'GET' && url === '/openapi.json') {
+    if (['GET', 'HEAD'].includes(req.method) && url === '/openapi.json') {
       // Serve the file BYTES verbatim. The service card publishes a sha256 of
       // this document, so re-serialising it would make that hash unverifiable.
       let raw;
@@ -285,12 +306,12 @@ const server = http.createServer(async (req, res) => {
       return res.end(raw);
     }
 
-    if (req.method === 'GET' && url === '/v1/probe') {
+    if (['GET', 'HEAD'].includes(req.method) && url === '/v1/probe') {
       const probe = await functionalProbe();
       return sendJson(res, probe.status === 'OK' ? 200 : 503, probe);
     }
 
-    if (req.method === 'GET' && url === '/') {
+    if (['GET', 'HEAD'].includes(req.method) && url === '/') {
       return sendJson(res, 200, {
         schema: SCHEMA,
         status: 'OK',
@@ -335,7 +356,7 @@ const server = http.createServer(async (req, res) => {
         },
         network: 'pocket-beta',
         chain_id: 'pocket-lego-testnet',
-        repository: 'https://github.com/Jayanng/pocket-hackathon',
+        repository: 'https://github.com/Jayanng/claim-verify',
         generated_at_utc: new Date().toISOString(),
       });
     }

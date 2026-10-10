@@ -18,11 +18,15 @@
  * All four sources are free and need no API key. Probed live.
  */
 
-const UA = 'claim-verify/1.0 (https://github.com/Jayanng/pocket-hackathon; claim-verify@example.invalid)';
+const UA = 'claim-verify/1.0 (https://github.com/Jayanng/claim-verify; claim-verify@example.invalid)';
 const TIMEOUT_MS = 12_000;
 
 /** A citation is bound to its text. Never constructed without a real quote. */
 function citation({ source, url, title, quote, published, retrieved_at }) {
+  // ENFORCE the invariant the comment below only asserted. A citation with no
+  // quote is a pointer, not evidence, and it breaks the functional probe's
+  // every_citation_is_bound_to_text check.
+  if (!quote || !String(quote).trim()) return null;
   return {
     source,
     url,
@@ -254,7 +258,7 @@ async function gatherEvidence(claim, { terms } = {}) {
     results.push(...got);
   }
 
-  const citations = results.flatMap((r) => r.citations);
+  const citations = results.flatMap((r) => r.citations).filter(Boolean);
   const source_errors = results.filter((r) => r.error).map((r) => ({ source: r.source, error: r.error }));
 
   return {

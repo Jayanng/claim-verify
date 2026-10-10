@@ -21,10 +21,14 @@
  * ambiguity about which attribute a number belongs to.
  */
 
-const UA = 'claim-verify/1.0 (https://github.com/Jayanng/pocket-hackathon; claim-verify@example.invalid)';
+const UA = 'claim-verify/1.0 (https://github.com/Jayanng/claim-verify; claim-verify@example.invalid)';
 const TIMEOUT_MS = 12_000;
 
 function citation({ source, url, title, quote, published, retrieved_at }) {
+  // ENFORCE the invariant the comment below only asserted. A citation with no
+  // quote is a pointer, not evidence, and it breaks the functional probe's
+  // every_citation_is_bound_to_text check.
+  if (!quote || !String(quote).trim()) return null;
   return {
     source,
     url,
