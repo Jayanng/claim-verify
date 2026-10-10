@@ -64,7 +64,7 @@ const ANCHORS = [
 // and year dedup never fired and one token became BOTH a number fact and a
 // year fact. That duplicate is what the day-of-month false contradiction fed
 // on: "born 4 Aug. 1961" produced a number 4 competing with a year 1961.
-const NUMBER_RE = /\b\d[\d,]*(?:\.\d+)?(?:\s*(?:%|percent|per cent|million|billion|trillion|thousand|[kKmM]\b|[a-z]{2,12}\b))?/gi;
+const NUMBER_RE = /\b\d[\d,]*(?:\.\d+)?(?:\s*(?:%|percent|per cent|million|billion|trillion|thousand|[kKmM]\b|meters?|metres?|feet|foot|ft|inches?|inch|cm|mm|km|kilometers?|kilometres?|miles?|kg|kilograms?|grams?|pounds?|lbs?|tonnes?|tons?|liters?|litres?|gallons?|usd|eur|gbp|jpy|dollars?|euros?|yen|cents?\b))?/gi;
 
 // Measurement and currency units. Without these "828 meters" and "2717 feet"
 // both canonicalised to unit null, the unit equality gate passed, and two true
@@ -187,8 +187,12 @@ function extractFacts(passage) {
   // and the duplicate number is discarded.
   const deduped = candidates.filter((c) => {
     if (c.kind !== 'number') return true;
+    // Compare the LEADING DIGIT RUN, not the full absorbed span. A trailing
+    // unit made the number span wider than the year span, so containment never
+    // fired and one token became both a number fact and a year fact.
     return !candidates.some((dt) =>
-      dt.kind === 'year' && c.at >= dt.at && c.at + c.len <= dt.at + dt.len);
+      dt.kind === 'year' && c.at >= dt.at && c.at + c.len <= dt.at + dt.len
+      || (dt.kind === 'year' && c.at === dt.at));
   });
   candidates.length = 0;
   candidates.push(...deduped);

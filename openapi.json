@@ -4,12 +4,12 @@
     "title": "claim-verify",
     "version": "1.0.0",
     "summary": "Claim Verification With Source Citations",
-    "description": "Takes a claim, retrieves evidence from eleven free sources, binds every citation to the exact text it cites, and reports whether the evidence contradicts the claim, agrees with it, or says nothing about it. A verdict is produced only by comparing explicit facts. Absence of contradiction is never treated as truth. A model assessment, when requested, is carried separately and cannot alter the verdict."
+    "description": "Takes a claim, retrieves evidence from eleven free sources, binds every citation to the exact text or the exact structured values it was drawn from and marks which of the two it is, then reports whether the evidence contradicts the claim, agrees with it, or says nothing about it. Every response is a JSON object. All inputs arrive in the body. A contradiction is provable, not probable: it needs the same attribute with a different value AND that the citation is about the same subject as the claim. Absence of contradiction is never treated as truth.\n\nCALLING CONVENTION. This is a Pocket Network service and /v1/verify is a METERED RELAY. It must arrive as a signed Pocket RelayRequest through a gateway, not as a plain HTTP POST. A plain application/json request to /v1/verify is rejected with 400 'invalid relay request: body must be a valid RelayRequest protobuf'. That rejection is the network working as designed, not a fault.\n\n  pocket-ap call --config pocket-ap.yaml --network beta --service claim-verify \\\n    --rpc-type rest -X POST --path /v1/verify \\\n    --data '{\"claim\":\"Albert Einstein was born in 1879.\"}'\n\nThe metadata routes (GET /, /healthz, /openapi.json, /v1/identity, /v1/probe) are served as ordinary HTTPS and need no signature."
   },
   "servers": [
     {
       "url": "https://claim-verify.duckdns.org",
-      "description": "Pocket Beta TestNet supplier endpoint"
+      "description": "Pocket Beta TestNet supplier endpoint. /v1/verify on this URL requires a signed Pocket RelayRequest. The metadata routes are plain HTTPS."
     }
   ],
   "paths": {
@@ -17,7 +17,7 @@
       "post": {
         "operationId": "verifyClaim",
         "summary": "Verify a claim against retrieved evidence",
-        "description": "Retrieves evidence, binds every citation to verbatim text, extracts explicit facts from the claim and from each quotation, and compares them by attribute. A contradiction requires the same attribute with a different value AND that the citation is about the same subject as the claim.",
+        "description": "Retrieves evidence, binds every citation to verbatim text, extracts explicit facts from the claim and from each quotation, and compares them by attribute. A contradiction requires the same attribute with a different value AND that the citation is about the same subject as the claim. MUST arrive as a signed Pocket RelayRequest. A plain HTTP POST returns 400 'invalid relay request: body must be a valid RelayRequest protobuf'.",
         "requestBody": {
           "required": true,
           "content": {
@@ -69,6 +69,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VerifyResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body over 64 KiB. Returns a JSON Rejection with status REJECTED and verdict UNRESOLVED, never a dropped connection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
                 }
               }
             }
@@ -148,6 +158,106 @@
                     "generated_at_utc": {
                       "type": "string",
                       "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "operationId": "getLanding",
+        "summary": "Landing page describing the service",
+        "description": "A human readable description of the service, the four verdicts, the evidence sources, and how to call the metered relay. Served as ordinary HTTPS.",
+        "responses": {
+          "200": {
+            "description": "Service description.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "verifyViaRootAlias",
+        "summary": "Relay alias for /v1/verify",
+        "description": "The RelayMiner forwards to the backend root and carries the target path inside the RelayRequest payload, so POST / must exist as an alias. Identical to POST /v1/verify. Externally, non-GET/HEAD on / is refused by the gateway before it reaches here.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification complete.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Payload rejected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Body over 64 KiB. Returns a JSON Rejection, never a dropped connection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Rejection"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Service could not complete the verification. Verdict is UNRESOLVED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "getHealthAlias",
+        "summary": "Alias for /healthz",
+        "description": "Liveness only, same as /healthz.",
+        "responses": {
+          "200": {
+            "description": "Process is alive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string"
                     }
                   }
                 }
@@ -395,12 +505,13 @@
           "status": {
             "type": "string",
             "enum": [
-              "OK",
+              "COMPLETED",
               "CONTRADICTED",
               "INSUFFICIENT_EVIDENCE",
               "UNAVAILABLE",
               "REJECTED"
-            ]
+            ],
+            "description": "Transport status only. COMPLETED means a verdict was computed, which is NOT a statement that the claim is true. Read verdict, never status."
           },
           "verdict": {
             "type": "string",

@@ -96,7 +96,10 @@ async function verifyClaim(claim, opts = {}) {
 
   return {
     schema: SCHEMA,
-    status: analysis.verdict === 'CONTRADICTED' ? 'CONTRADICTED' : 'OK',
+    // Transport status, never a truth signal. 'OK' beside an UNRESOLVED verdict
+    // reads like a positive judgement on a claim the service is explicitly
+    // refusing to judge. A verdict was computed, so say COMPLETED.
+    status: analysis.verdict === 'CONTRADICTED' ? 'CONTRADICTED' : 'COMPLETED',
     verdict: analysis.verdict,
     claim: text,
     reason: reasonFor(analysis, evidence),
@@ -118,7 +121,7 @@ function reasonFor(analysis, evidence) {
       );
     case 'SUPPORTED':
       return (
-        `${analysis.supports.length} cited source(s) state the same value for an ` +
+        `${new Set(analysis.supports.map((s) => s.source)).size} cited source(s) state the same value for an ` +
         `attribute the claim asserts. This is agreement with the cited source, not ` +
         `proof that the claim is true.`
       );
