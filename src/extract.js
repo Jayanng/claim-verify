@@ -39,7 +39,30 @@ function extractPropositions(passage) {
   const out = [];
   if (!text.trim()) return out;
 
-  for (const clause of splitClauses(text)) {
+  // COORDINATED VALUES.
+  //
+  // splitClauses cuts on 'and', so "population was 100 people in 2020 and 200
+  // people in 2021" becomes two clauses and the second has no predicate word.
+  // It then produces nothing, and an agreeing value is deleted before the
+  // gate can see it. That is the exact shape of the bug this phase is meant to
+  // close, arriving one layer earlier.
+  //
+  // A clause with no predicate of its own is a CONTINUATION of the one before
+  // it. Join them rather than dropping the values.
+  const rawClauses = splitClauses(text);
+  const clauses = [];
+  for (const raw of rawClauses) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const hasPredicate = predicateRe().test(trimmed);
+    if (hasPredicate || clauses.length === 0) {
+      clauses.push(trimmed);
+    } else {
+      clauses[clauses.length - 1] = clauses[clauses.length - 1] + ' and ' + trimmed;
+    }
+  }
+
+  for (const clause of clauses) {
     if (!clause.trim()) continue;
 
     const mentions = entityMentions(clause);
@@ -102,66 +125,52 @@ function extractPropositions(passage) {
     }
     if (!numbers.length) continue;
 
-    // Bind each value to its nearest predicate occurrence. ONE value per
-    // occurrence per TYPE, and a value is never discarded merely because
-    // another was closer: several values under one predicate is AMBIGUITY,
-    // which the gate reads as UNRESOLVED, and dropping one is how an agreeing
-    // value vanished before comparison.
-    const byOccurrence = new Map();
+    // EVERY VALUE SURVIVES. Nothing is discarded because another was closer.
+    //
+    // The first implementation keyed on { occurrence, type } and replaced the
+    // earlier entry, keeping at most two when they were exactly equidistant.
+    // So "population was 100 people in 2020 and 200 people in 2021" emitted
+    // only the 100, and a claim about the later 200 was contradicted by the
+    // 100 even though the agreeing value was right there in the text.
+    //
+    // The comment claimed the gate would read multiplicity as ambiguity. The
+    // gate cannot detect multiplicity that extraction has already deleted.
+    //
+    // So: group values by the predicate occurrence they belong to, and emit
+    // one proposition per value. The gate decides what to do with several.
+    const groups = new Map();
     for (const num of numbers) {
-      const key = `${num.predAt}|${num.type}`;
-      const prev = byOccurrence.get(key);
-      // Keep both when they are equally near. The gate handles multiplicity.
-      if (prev && prev.dist < num.dist) continue;
-      if (prev && prev.dist === num.dist && prev.at !== num.at) {
-        prev.alsoNear = num;
-        continue;
-      }
       const owner = preds.find((p) => p.at === num.predAt);
-      const dist = num.at > owner.end ? num.at - owner.end : owner.at - (num.at + num.len);
-      byOccurrence.set(key, { ...num, dist, owner });
+      if (!owner) continue;
+      if (!groups.has(owner.at)) groups.set(owner.at, { owner, values: [] });
+      groups.get(owner.at).values.push(num);
     }
 
-    for (const entry of byOccurrence.values()) {
-      const owner = entry.owner;
+    for (const { owner, values } of groups.values()) {
       const qualifierSet = readQualifiers(clause);
-
-      const prop = {
-        subject: subject
-          ? { surface: subject.surface, tokens: subject.tokens, suffix: subject.suffix }
-          : { surface: '', tokens: [] },
-        predicate: {
-          canonical: owner.canonical,
-          surface: owner.surface,
-          words: [owner.surface],
-          semantic_category: owner.semantic_category,
-        },
-        object: {
-          value: entry.value,
-          type: entry.type,
-          unit: entry.unit,
-          raw: entry.raw,
-        },
-        qualifiers: qualifierSet,
-        provenance: {
-          sentence: clause,
-          attachment: attachmentNote,
-          span: [Math.max(0, owner.at - 25), Math.min(clause.length, entry.at + entry.len + 25)],
-          quote: clause.slice(Math.max(0, owner.at - 25), Math.min(clause.length, entry.at + entry.len + 25)),
-        },
-      };
-      out.push(prop);
-
-      // A second value equally near the same predicate is a separate
-      // proposition, not a replacement. Keep it.
-      if (entry.alsoNear) {
+      for (const entry of values) {
         out.push({
-          ...prop,
+          subject: subject
+            ? { surface: subject.surface, tokens: subject.tokens, suffix: subject.suffix }
+            : { surface: '', tokens: [] },
+          predicate: {
+            canonical: owner.canonical,
+            surface: owner.surface,
+            words: [owner.surface],
+            semantic_category: owner.semantic_category,
+          },
           object: {
-            value: entry.alsoNear.value,
-            type: entry.alsoNear.type,
-            unit: entry.alsoNear.unit,
-            raw: entry.alsoNear.raw,
+            value: entry.value,
+            type: entry.type,
+            unit: entry.unit,
+            raw: entry.raw,
+          },
+          qualifiers: qualifierSet,
+          provenance: {
+            sentence: clause,
+            attachment: attachmentNote,
+            span: [Math.max(0, owner.at - 25), Math.min(clause.length, entry.at + entry.len + 25)],
+            quote: clause.slice(Math.max(0, owner.at - 25), Math.min(clause.length, entry.at + entry.len + 25)),
           },
         });
       }
