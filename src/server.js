@@ -30,7 +30,7 @@ const HOST = process.env.HOST || '127.0.0.1';
 
 const OPENAPI_PATH = path.join(__dirname, '..', 'openapi.json');
 
-// Upstream budget. Eleven sources, bounded three at a time.
+// Upstream budget. Fourteen sources, bounded three at a time.
 const VERIFY_TIMEOUT_MS = 45_000;
 
 function sendJson(res, status, obj, { bare = false } = {}) {
@@ -187,6 +187,7 @@ function identityPayload() {
     evidence_sources: [
       'wikipedia', 'crossref', 'sec-edgar', 'arxiv', 'wikidata',
       'world-bank', 'europepmc', 'openalex', 'openlibrary', 'musicbrainz', 'usgs',
+      'gutenberg', 'internet-archive', 'wikinews',
     ],
     verdicts: ['CONTRADICTED', 'SUPPORTED', 'UNRESOLVED', 'INSUFFICIENT_EVIDENCE'],
     probes: {
@@ -330,7 +331,7 @@ const server = http.createServer(async (req, res) => {
           version: SERVICE_VERSION,
         },
         what_it_does:
-          'Takes a claim, retrieves evidence from eleven free sources, binds every ' +
+          'Takes a claim, retrieves evidence from fourteen free sources, binds every ' +
           'citation to the exact text it cites, and reports whether the evidence ' +
           'contradicts the claim, agrees with it, or says nothing about it. ' +
           'Absence of contradiction is never treated as truth.',

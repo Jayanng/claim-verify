@@ -193,9 +193,9 @@ async function modelAssess(claim, evidence, analysis) {
 function buildMethod() {
   return {
     description:
-      'Retrieves evidence from eleven free sources (Wikipedia, Wikidata, CrossRef, ' +
+      'Retrieves evidence from fourteen free sources (Wikipedia, Wikidata, CrossRef, ' +
       'OpenAlex, Europe PMC, SEC EDGAR, arXiv, World Bank, Open Library, MusicBrainz ' +
-      'and USGS), binds every citation to the exact text it cites, extracts explicit ' +
+      'USGS, Project Gutenberg, Internet Archive and Wikinews), binds every citation to the exact text it cites, extracts explicit ' +
       'facts from the claim and from each quotation, and compares them by attribute.',
     what_verdict_means: {
       CONTRADICTED:

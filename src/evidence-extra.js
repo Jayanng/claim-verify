@@ -413,3 +413,96 @@ module.exports = {
   citation,
   squash,
 };
+
+// ---------------------------------------------------------------------------
+// Three further free sources, probed reachable with no API key.
+//
+// Project Gutenberg and Internet Archive cover published books and archived
+// documents that the academic and reference sources do not. Wikinews covers
+// recent events, which is the gap the encyclopaedic sources are weakest on.
+//
+// Probed live before wiring: gutendex 200 JSON, archive.org 200 JSON,
+// wikinews 200 JSON. Semantic Scholar and CORE rate limit without a key,
+// Library of Congress 403s, GeoNames and FAO require credentials, and NOAA
+// needs a token. Those were NOT added, because a source that cannot be
+// queried is not evidence.
+// ---------------------------------------------------------------------------
+
+async function fromGutenberg(terms) {
+  const q = encodeURIComponent(terms.slice(0, 5).join(' '));
+  try {
+    const d = await getJson(`https://gutendex.com/books/?search=${q}`);
+    const out = [];
+    for (const b of (d.results || []).slice(0, 3)) {
+      const title = b.title || 'Untitled';
+      const author = (b.authors || []).map((a) => a.name).join(', ') || '[missing]';
+      const year = b.copyright || b.publication_year || '[missing]';
+      const quote = citation({
+        source: 'gutenberg',
+        url: b.formats && b.formats['text/html'] ? String(b.formats['text/html']).split(' ')[0] : null,
+        title,
+        quote: `${title} by ${author}, first published ${year}.`,
+        quote_kind: 'structured',
+      });
+      if (quote) out.push(quote);
+    }
+    return { source: 'gutenberg', citations: out, error: null };
+  } catch (e) {
+    return { source: 'gutenberg', citations: [], error: String(e && e.message || e) };
+  }
+}
+
+async function fromInternetArchive(terms) {
+  const q = encodeURIComponent(terms.slice(0, 5).join(' '));
+  try {
+    const d = await getJson(
+      `https://archive.org/advancedsearch.php?q=${q}&fl[]=identifier&fl[]=title&fl[]=year&fl[]=creator&rows=3&output=json`
+    );
+    const out = [];
+    const docs = (d.response && d.response.docs) || [];
+    for (const doc of docs) {
+      const title = doc.title || 'Untitled';
+      const creator = doc.creator || '[missing]';
+      const year = doc.year || '[missing]';
+      const quote = citation({
+        source: 'internet-archive',
+        url: doc.identifier ? `https://archive.org/details/${doc.identifier}` : null,
+        title,
+        quote: `${title} by ${creator}, published ${year}.`,
+        quote_kind: 'structured',
+      });
+      if (quote) out.push(quote);
+    }
+    return { source: 'internet-archive', citations: out, error: null };
+  } catch (e) {
+    return { source: 'internet-archive', citations: [], error: String(e && e.message || e) };
+  }
+}
+
+async function fromWikinews(terms) {
+  const q = encodeURIComponent(terms.slice(0, 5).join(' '));
+  try {
+    const d = await getJson(
+      `https://en.wikinews.org/w/api.php?action=query&list=search&srsearch=${q}&srlimit=3&format=json`
+    );
+    const out = [];
+    for (const h of ((d.query && d.query.search) || [])) {
+      const snippet = squash((h.snippet || '').replace(/<[^>]+>/g, ''));
+      const quote = citation({
+        source: 'wikinews',
+        url: `https://en.wikinews.org/wiki/${encodeURIComponent(String(h.title).replace(/ /g, '_'))}`,
+        title: h.title,
+        quote: snippet || null,
+        quote_kind: 'text',
+      });
+      if (quote) out.push(quote);
+    }
+    return { source: 'wikinews', citations: out, error: null };
+  } catch (e) {
+    return { source: 'wikinews', citations: [], error: String(e && e.message || e) };
+  }
+}
+
+module.exports.fromGutenberg = fromGutenberg;
+module.exports.fromInternetArchive = fromInternetArchive;
+module.exports.fromWikinews = fromWikinews;

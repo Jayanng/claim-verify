@@ -15,7 +15,7 @@
  * evidence set and must return INSUFFICIENT_EVIDENCE. Nothing here fills a gap,
  * synthesises a quote, or paraphrases a source into something it did not say.
  *
- * All eleven sources are free and need no API key. Probed live.
+ * All fourteen sources are free and need no API key. Probed live.
  */
 
 const UA = 'claim-verify/1.0 (https://github.com/Jayanng/claim-verify; claim-verify@example.invalid)';
@@ -256,7 +256,7 @@ async function gatherEvidence(claim, { terms } = {}) {
     extra.fromOpenAlex, extra.fromOpenLibrary, extra.fromMusicBrainz, extra.fromUsgs,
   ];
 
-  // BOUNDED CONCURRENCY. Firing all eleven at once gets the shared encyclopaedia
+  // BOUNDED CONCURRENCY. Firing all fourteen at once gets the shared encyclopaedia
   // and knowledge-base endpoints to answer 403: they rate limit by request rate,
   // not by identity. Running a few at a time keeps every source usable and is
   // politer to free services we depend on.

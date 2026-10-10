@@ -94,9 +94,9 @@ test('identity pins the service id and names all three Pocket roles', () => {
   assert.equal(addrs.size, 3, 'the three roles must be three different addresses');
 });
 
-test('identity lists eleven evidence sources', () => {
+test('identity lists fourteen evidence sources', () => {
   const d = identityPayload();
-  assert.equal(d.evidence_sources.length, 11);
+  assert.equal(d.evidence_sources.length, 14);
 });
 
 test('the verdict vocabulary is exactly the four published values', () => {
