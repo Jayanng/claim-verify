@@ -33,6 +33,8 @@
 
 const { gatherEvidence, extractTerms } = require('./evidence');
 const { deterministicVerdict } = require('./contradict');
+const { extractPropositions } = require('./extract');
+const gate = require('./compare');
 
 const SCHEMA = 'claim-verify/v1';
 
@@ -85,6 +87,55 @@ async function verifyClaim(claim, opts = {}) {
   // Retrieval can be steered; the safety check cannot be weakened.
   const claimDerivedTerms = extractTerms(text);
 
+  // THE TYPED-PROPOSITION GATE IS AUTHORITATIVE.
+  //
+  // Phase 1 to Phase 3 rebuilt the representation and the decision rule
+  // because the old anchor-plus-number engine produced nine distinct false
+  // contradictions. The verdict now comes from extract.js and compare.js.
+  // The legacy engine still runs and is reported alongside as a cross-check,
+  // so a divergence is visible rather than silent.
+  const claimProps = extractPropositions(text);
+  const gateContradictions = [];
+  const gateSupports = [];
+  const gateRefusals = [];
+  for (const cp of claimProps) {
+    for (const cit of evidence.citations) {
+      const evProps = extractPropositions(cit.quote || '');
+      const r = gate.evaluate(cp, evProps, { quote: cit.quote || '' });
+      if (r.verdict === 'CONTRADICTED') {
+        gateContradictions.push({
+          anchor: cp.predicate.canonical,
+          surface: cp.predicate.surface,
+          claim_value: cp.object.raw,
+          evidence_value: (evProps.find((e) => e.predicate.canonical === cp.predicate.canonical) || {}).object
+            ? (evProps.find((e) => e.predicate.canonical === cp.predicate.canonical).object.raw) : null,
+          claim_quote: (cp.provenance && cp.provenance.quote) || text,
+          evidence_quote: cit.quote,
+          evidence_quote_kind: cit.quote_kind || 'structured',
+          source: cit.source || null,
+          url: cit.url || null,
+          title: cit.title || null,
+          kind: 'value_conflict',
+        });
+      } else if (r.reason) {
+        gateRefusals.push({ anchor: cp.predicate.canonical, source: cit.source, reason: r.reason });
+      }
+      if (gate.canSupport(cp, evProps)) {
+        gateSupports.push({
+          anchor: cp.predicate.canonical,
+          claim_value: cp.object.raw,
+          evidence_quote: cit.quote,
+          evidence_quote_kind: cit.quote_kind || 'structured',
+          source: cit.source || null,
+          url: cit.url || null,
+          title: cit.title || null,
+        });
+      }
+    }
+  }
+  const gateVerdict = gateContradictions.length ? 'CONTRADICTED'
+    : gateSupports.length ? 'SUPPORTED' : 'UNRESOLVED';
+
   const analysis = deterministicVerdict(text, evidence.citations, {
     claimTerms: claimDerivedTerms, // NEVER the caller override: see below
   });
@@ -99,8 +150,10 @@ async function verifyClaim(claim, opts = {}) {
     // Transport status, never a truth signal. 'OK' beside an UNRESOLVED verdict
     // reads like a positive judgement on a claim the service is explicitly
     // refusing to judge. A verdict was computed, so say COMPLETED.
-    status: analysis.verdict === 'CONTRADICTED' ? 'CONTRADICTED' : 'COMPLETED',
-    verdict: analysis.verdict,
+    status: gateVerdict === 'CONTRADICTED' ? 'CONTRADICTED' : 'COMPLETED',
+    // THE GATE DECIDES. The legacy engine's answer is reported separately so
+    // a divergence is visible rather than silent.
+    verdict: gateVerdict,
     claim: text,
     reason: reasonFor(analysis, evidence),
     evidence,
