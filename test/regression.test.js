@@ -181,3 +181,28 @@ test('the invariant count is what we expect', () => {
   assert.ok(INVARIANTS.length >= 30, `expected at least 30 invariants, got ${INVARIANTS.length}`);
   assert.ok(MUST_DETECT.length >= 4, `expected at least 4 detection cases, got ${MUST_DETECT.length}`);
 });
+
+test('agreement in one citation neutralises a contradiction in another', () => {
+  // Final review 2: the gate's scope check ran once per citation, so the scope
+  // was ONE citation. Citation A saying 1999 contradicted the claim even when
+  // citation B stated the claim's own 2000.
+  const { extractPropositions } = require('../src/extract');
+  const g = require('../src/compare');
+  const V = (claim, quotes) => {
+    const cp = extractPropositions(claim);
+    const all = quotes.flatMap((q) => extractPropositions(q));
+    let v = 'UNRESOLVED';
+    for (const p of cp) {
+      const r = g.evaluate(p, all, { quote: quotes.join(' ') });
+      if (r.verdict === 'CONTRADICTED') return 'CONTRADICTED';
+      if (g.canSupport(p, all)) v = 'SUPPORTED';
+    }
+    return v;
+  };
+  assert.equal(V('Acme Corp was founded in 2000.',
+    ['Acme Corp was founded in 1999.', 'Acme Corp was founded in 2000.']), 'SUPPORTED',
+    'an agreeing citation must neutralise a contradicting one');
+  assert.equal(V('Acme Corp was founded in 2000.',
+    ['Acme Corp was founded in 1999.']), 'CONTRADICTED',
+    'a lone contradicting source must still be caught');
+});

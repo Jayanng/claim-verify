@@ -98,9 +98,45 @@ async function verifyClaim(claim, opts = {}) {
   const gateContradictions = [];
   const gateSupports = [];
   const gateRefusals = [];
+  // ONE SCOPE ACROSS ALL CITATIONS.
+  //
+  // The gate's condition 13 says no compatible proposition anywhere in the
+  // evaluated scope may exist before a contradiction is reported. Running the
+  // gate once per citation made the scope ONE citation, so citation A saying
+  // 1999 contradicted the claim even when citation B stated the claim's own
+  // 2000. Agreement anywhere must neutralise, so every proposition from every
+  // citation is gathered first and the gate sees them all.
+  const allEvProps = [];
+  for (const cit of evidence.citations) {
+    for (const ep of extractPropositions(cit.quote || '')) {
+      allEvProps.push({ ...ep, _citation: cit });
+    }
+  }
+
   for (const cp of claimProps) {
+    // The scope-wide agreement check runs on EVERYTHING first.
+    const scope = gate.evaluate(cp, allEvProps, {
+      quote: (evidence.citations.map((c) => c.quote).filter(Boolean).join(' ')).slice(0, 4000),
+    });
+    if (scope.verdict !== 'CONTRADICTED') {
+      if (gate.canSupport(cp, allEvProps)) {
+        gateSupports.push({
+          anchor: cp.predicate.canonical,
+          claim_value: cp.object.raw,
+          evidence_quote: scope.detail || (evidence.citations[0] && evidence.citations[0].quote),
+          evidence_quote_kind: (evidence.citations[0] && evidence.citations[0].quote_kind) || 'structured',
+          source: (evidence.citations[0] && evidence.citations[0].source) || null,
+          url: (evidence.citations[0] && evidence.citations[0].url) || null,
+          title: (evidence.citations[0] && evidence.citations[0].title) || null,
+        });
+      } else {
+        gateRefusals.push({ anchor: cp.predicate.canonical, source: 'all', reason: scope.reason });
+      }
+      continue;
+    }
+
     for (const cit of evidence.citations) {
-      const evProps = extractPropositions(cit.quote || '');
+      const evProps = allEvProps.filter((e) => e._citation === cit);
       const r = gate.evaluate(cp, evProps, { quote: cit.quote || '' });
       if (r.verdict === 'CONTRADICTED') {
         gateContradictions.push({
